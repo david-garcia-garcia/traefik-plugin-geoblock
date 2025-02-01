@@ -114,12 +114,12 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	for _, ip := range p.GetRemoteIPs(req) {
 		allowed, country, err := p.CheckAllowed(ip)
 		if err != nil {
-			log.Printf("%s: [%s %s %s] - %v", p.name, req.Host, req.Method, req.URL.Path, err)
+			log.Printf("%s: [%s %s %s %s] - %v", ip, p.name, req.Host, req.Method, req.URL.Path, err)
 			rw.WriteHeader(p.disallowedStatusCode)
 			return
 		}
 		if !allowed {
-			log.Printf("%s: [%s %s %s] blocked request from %s", p.name, req.Host, req.Method, req.URL.Path, country)
+			log.Printf("%s: [%s %s %s %s] blocked request from %s", ip, p.name, req.Host, req.Method, req.URL.Path, country)
 			rw.WriteHeader(p.disallowedStatusCode)
 			return
 		}
@@ -134,7 +134,7 @@ func (p Plugin) GetRemoteIPs(req *http.Request) []string {
 
 	if xff := req.Header.Get("x-forwarded-for"); xff != "" {
 		for _, ip := range strings.Split(xff, ",") {
-			ip = strings.TrimSpace(ip)
+			ip = cleanIPAddress(ip)
 			if ip == "" {
 				continue
 			}
@@ -143,7 +143,7 @@ func (p Plugin) GetRemoteIPs(req *http.Request) []string {
 	}
 	if xri := req.Header.Get("x-real-ip"); xri != "" {
 		for _, ip := range strings.Split(xri, ",") {
-			ip = strings.TrimSpace(ip)
+			ip = cleanIPAddress(ip)
 			if ip == "" {
 				continue
 			}
@@ -157,6 +157,19 @@ func (p Plugin) GetRemoteIPs(req *http.Request) []string {
 	}
 
 	return ips
+}
+
+func cleanIPAddress(ip string) string {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return ""
+	}
+	// Split IP from port if port exists (e.g., "192.168.1.1:8080")
+	host, _, err := net.SplitHostPort(ip)
+	if err == nil {
+		return host
+	}
+	return ip // If no port, return the original IP
 }
 
 // CheckAllowed checks whether a given IP address is allowed according to the configured allowed countries.
