@@ -9,7 +9,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
+
+	"log/slog"
 
 	"github.com/ip2location/ip2location-go/v9"
 )
@@ -31,11 +34,17 @@ type Config struct {
 	BanHtmlFilePath      string   // Path to HTML file to serve for banned requests
 	AllowedIPBlocks      []string // List of whitelist CIDR
 	BlockedIPBlocks      []string // List of blocklisted CIDRs
+	LogLevel             string   // "debug", "info", "warn", "error"
+	LogFormat            string   // "json" or "text"
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
-	return &Config{DisallowedStatusCode: http.StatusForbidden}
+	return &Config{
+		DisallowedStatusCode: http.StatusForbidden,
+		LogLevel:             "error", // Default to error logging
+		LogFormat:            "text",  // Default to text format
+	}
 }
 
 type Plugin struct {
@@ -52,12 +61,41 @@ type Plugin struct {
 	allowedIPBlocks      []*net.IPNet
 	blockedIPBlocks      []*net.IPNet
 	banHtmlTemplate      *template.Template
+	logger               *slog.Logger
 }
 
 // Add this struct to hold template data
 type BanTemplateData struct {
 	Country string
 	IP      string
+}
+
+// Add helper to create logger
+func createLogger(name, level, format string) *slog.Logger {
+	var logLevel slog.Level
+	switch level {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "info":
+		logLevel = slog.LevelInfo
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
+	}
+
+	opts := &slog.HandlerOptions{Level: logLevel}
+
+	var handler slog.Handler
+	if format == "json" {
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stderr, opts)
+	}
+
+	return slog.New(handler).With("plugin", name)
 }
 
 // New creates a new plugin instance.
@@ -70,13 +108,19 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		return nil, fmt.Errorf("%s: no config provided", name)
 	}
 
+	// Add debug log using standard log package to verify basic logging works
+	log.Printf("[DEBUG] Creating plugin with log level: %s, format: %s", cfg.LogLevel, cfg.LogFormat)
+
 	if !cfg.Enabled {
-		log.Printf("%s: disabled", name)
+		logger := createLogger(name, cfg.LogLevel, cfg.LogFormat)
+		logger.Info("plugin disabled") // This should show up if disabled
 
 		return &Plugin{
-			next: next,
-			name: name,
-			db:   nil,
+			next:    next,
+			name:    name,
+			db:      nil,
+			enabled: false,
+			logger:  logger,
 		}, nil
 	}
 
@@ -113,6 +157,11 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		}
 	}
 
+	logger := createLogger(name, cfg.LogLevel, cfg.LogFormat)
+	logger.Info("plugin initialized", // This should show up when enabled
+		"allowed_countries", cfg.AllowedCountries,
+		"blocked_countries", cfg.BlockedCountries)
+
 	return &Plugin{
 		next:                 next,
 		name:                 name,
@@ -127,6 +176,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		allowedIPBlocks:      allowedIPBlocks,
 		blockedIPBlocks:      blockedIPBlocks,
 		banHtmlTemplate:      banHtmlTemplate,
+		logger:               logger,
 	}, nil
 }
 
@@ -140,12 +190,22 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	for _, ip := range p.GetRemoteIPs(req) {
 		allowed, country, err := p.CheckAllowed(ip)
 		if err != nil {
-			log.Printf("%s: [%s %s %s %s] - %v", p.name, ip, req.Host, req.Method, req.URL.Path, err)
+			p.logger.Error("request check failed",
+				"ip", ip,
+				"host", req.Host,
+				"method", req.Method,
+				"path", req.URL.Path,
+				"error", err)
 			p.serveBanHtml(rw, ip, "Unknown")
 			return
 		}
 		if !allowed {
-			log.Printf("%s: [%s %s %s %s] blocked request from %s", p.name, ip, req.Host, req.Method, req.URL.Path, country)
+			p.logger.Info("blocked request",
+				"ip", ip,
+				"country", country,
+				"host", req.Host,
+				"method", req.Method,
+				"path", req.URL.Path)
 			p.serveBanHtml(rw, ip, country)
 			return
 		}
@@ -363,7 +423,8 @@ func (p Plugin) serveBanHtml(rw http.ResponseWriter, ip, country string) {
 
 		var buf bytes.Buffer
 		if err := p.banHtmlTemplate.Execute(&buf, data); err != nil {
-			log.Printf("%s: error executing ban template: %v", p.name, err)
+			p.logger.Error("failed to execute ban template",
+				"error", err)
 			rw.WriteHeader(p.disallowedStatusCode)
 			return
 		}
