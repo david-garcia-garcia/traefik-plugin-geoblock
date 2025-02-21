@@ -1,9 +1,11 @@
 package traefik_plugin_geoblock
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -14,6 +16,9 @@ import (
 
 //go:generate go run ./tools/dbdownload/main.go -o ./IP2LOCATION-LITE-DB1.IPV6.BIN
 
+// Add this constant near the top of the file, after imports
+const EmptyCountry = "-"
+
 // Config defines the plugin configuration.
 type Config struct {
 	Enabled              bool     // Enable this plugin?
@@ -23,6 +28,7 @@ type Config struct {
 	DefaultAllow         bool     // If source matches neither blocklist nor whitelist, should it be allowed through?
 	AllowPrivate         bool     // Allow requests from private / internal networks?
 	DisallowedStatusCode int      // HTTP status code to return for disallowed requests
+	BanHtmlFilePath      string   // Path to HTML file to serve for banned requests
 	AllowedIPBlocks      []string // List of whitelist CIDR
 	BlockedIPBlocks      []string // List of blocklisted CIDRs
 }
@@ -42,8 +48,16 @@ type Plugin struct {
 	defaultAllow         bool
 	allowPrivate         bool
 	disallowedStatusCode int
+	banHtmlFilePath      string
 	allowedIPBlocks      []*net.IPNet
 	blockedIPBlocks      []*net.IPNet
+	banHtmlTemplate      *template.Template
+}
+
+// Add this struct to hold template data
+type BanTemplateData struct {
+	Country string
+	IP      string
 }
 
 // New creates a new plugin instance.
@@ -89,6 +103,16 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		return nil, fmt.Errorf("%s: failed loading allowed CIDR blocks: %w", name, err)
 	}
 
+	var banHtmlTemplate *template.Template
+	if cfg.BanHtmlFilePath != "" {
+		tmpl, err := template.ParseFiles(cfg.BanHtmlFilePath)
+		if err != nil {
+			log.Printf("%s: warning - could not load ban HTML template %s: %v", name, cfg.BanHtmlFilePath, err)
+		} else {
+			banHtmlTemplate = tmpl
+		}
+	}
+
 	return &Plugin{
 		next:                 next,
 		name:                 name,
@@ -99,8 +123,10 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		defaultAllow:         cfg.DefaultAllow,
 		allowPrivate:         cfg.AllowPrivate,
 		disallowedStatusCode: cfg.DisallowedStatusCode,
+		banHtmlFilePath:      cfg.BanHtmlFilePath,
 		allowedIPBlocks:      allowedIPBlocks,
 		blockedIPBlocks:      blockedIPBlocks,
+		banHtmlTemplate:      banHtmlTemplate,
 	}, nil
 }
 
@@ -114,13 +140,13 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	for _, ip := range p.GetRemoteIPs(req) {
 		allowed, country, err := p.CheckAllowed(ip)
 		if err != nil {
-			log.Printf("%s: [%s %s %s %s] - %v", ip, p.name, req.Host, req.Method, req.URL.Path, err)
-			rw.WriteHeader(p.disallowedStatusCode)
+			log.Printf("%s: [%s %s %s %s] - %v", p.name, ip, req.Host, req.Method, req.URL.Path, err)
+			p.serveBanHtml(rw, ip, "Unknown")
 			return
 		}
 		if !allowed {
-			log.Printf("%s: [%s %s %s %s] blocked request from %s", ip, p.name, req.Host, req.Method, req.URL.Path, country)
-			rw.WriteHeader(p.disallowedStatusCode)
+			log.Printf("%s: [%s %s %s %s] blocked request from %s", p.name, ip, req.Host, req.Method, req.URL.Path, country)
+			p.serveBanHtml(rw, ip, country)
 			return
 		}
 	}
@@ -182,7 +208,7 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 		return false, ip, fmt.Errorf("lookup of %s failed: %w", ip, err)
 	}
 
-	if country == "-" {
+	if country == EmptyCountry {
 		return p.allowPrivate, country, nil
 	}
 
@@ -319,4 +345,31 @@ func (p Plugin) isInIPBlocks(ip string, ipBlocks []*net.IPNet) (bool, int, error
 	}
 
 	return false, 0, nil
+}
+
+// Update the serveBanHtml function to use the template
+func (p Plugin) serveBanHtml(rw http.ResponseWriter, ip, country string) {
+	if p.banHtmlTemplate != nil {
+		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+		rw.WriteHeader(p.disallowedStatusCode)
+
+		if country == EmptyCountry || country == "" {
+			country = "Unknown"
+		}
+		data := BanTemplateData{
+			Country: country,
+			IP:      ip,
+		}
+
+		var buf bytes.Buffer
+		if err := p.banHtmlTemplate.Execute(&buf, data); err != nil {
+			log.Printf("%s: error executing ban template: %v", p.name, err)
+			rw.WriteHeader(p.disallowedStatusCode)
+			return
+		}
+
+		_, _ = rw.Write(buf.Bytes())
+		return
+	}
+	rw.WriteHeader(p.disallowedStatusCode)
 }

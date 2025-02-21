@@ -45,6 +45,8 @@ http:
         geoblock:
           # Enable this plugin?
           enabled: true
+          # HTML served when a request is blocked
+          banHtmlFilePath: /plugins-local/src/github.com/nscuro/ban.html
           # Path to ip2location database file
           databaseFilePath: /plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN
           # Whitelist of countries to allow (ISO 3166-1 alpha-2)
