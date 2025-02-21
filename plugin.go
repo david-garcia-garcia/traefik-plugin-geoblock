@@ -15,8 +15,6 @@ import (
 
 	"log/slog"
 
-	"bufio"
-
 	"github.com/ip2location/ip2location-go/v9"
 )
 
@@ -75,7 +73,24 @@ type BanTemplateData struct {
 	IP      string
 }
 
-// Add helper to create logger
+// Replace bufferedCloseWriter with simpleFileWriter
+type simpleFileWriter struct {
+	path string
+}
+
+func (w *simpleFileWriter) Write(p []byte) (n int, err error) {
+	// Opening and closing the file is not efficient, but's makes handling log rotation easier
+	// TODO: Either do what traefik does (listen to USR1 signal and rotate) or use a buffered writer with a timeout
+	file, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+
+	return file.Write(p)
+}
+
+// Update createLogger to use simpleFileWriter
 func createLogger(name, level, format, path string) *slog.Logger {
 	var logLevel slog.Level
 	level = strings.ToLower(level) // Convert level to lowercase
@@ -104,18 +119,8 @@ func createLogger(name, level, format, path string) *slog.Logger {
 		writer = os.Stdout
 		log.Printf("Using stdout for logging")
 	default:
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			log.Printf("Failed to open log file %s: %v, falling back to stderr", path, err)
-			writer = os.Stderr
-			log.Printf("Using stderr for logging due to file open error")
-		} else {
-			writer = &bufferedCloseWriter{
-				buffer: bufio.NewWriter(file),
-				file:   file,
-			}
-			log.Printf("Using file %s for logging", path)
-		}
+		writer = &simpleFileWriter{path: path}
+		log.Printf("Using file %s for logging", path)
 	}
 
 	var handler slog.Handler
@@ -128,31 +133,6 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	}
 
 	return slog.New(handler).With("plugin", name)
-}
-
-// Add this type and methods
-type bufferedCloseWriter struct {
-	buffer *bufio.Writer
-	file   *os.File
-}
-
-func (w *bufferedCloseWriter) Write(p []byte) (n int, err error) {
-	n, err = w.buffer.Write(p)
-	if err != nil {
-		w.file.Close()
-		return n, err
-	}
-	// Flush after each write to ensure logs are written promptly
-	err = w.buffer.Flush()
-	if err != nil {
-		w.file.Close()
-	}
-	return n, err
-}
-
-func (w *bufferedCloseWriter) Close() error {
-	w.buffer.Flush()
-	return w.file.Close()
 }
 
 // New creates a new plugin instance.
