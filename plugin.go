@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"strings"
 
 	"log/slog"
+
+	"bufio"
 
 	"github.com/ip2location/ip2location-go/v9"
 )
@@ -36,14 +39,16 @@ type Config struct {
 	BlockedIPBlocks      []string // List of blocklisted CIDRs
 	LogLevel             string   // "debug", "info", "warn", "error"
 	LogFormat            string   // "json" or "text"
+	LogPath              string   // Path to log file ("stdout", "stderr", or file path)
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
 		DisallowedStatusCode: http.StatusForbidden,
-		LogLevel:             "error", // Default to error logging
-		LogFormat:            "text",  // Default to text format
+		LogLevel:             "error",  // Default to error logging
+		LogFormat:            "text",   // Default to text format
+		LogPath:              "stdout", // Default to stderr
 	}
 }
 
@@ -71,8 +76,9 @@ type BanTemplateData struct {
 }
 
 // Add helper to create logger
-func createLogger(name, level, format string) *slog.Logger {
+func createLogger(name, level, format, path string) *slog.Logger {
 	var logLevel slog.Level
+	level = strings.ToLower(level) // Convert level to lowercase
 	switch level {
 	case "debug":
 		logLevel = slog.LevelDebug
@@ -84,18 +90,69 @@ func createLogger(name, level, format string) *slog.Logger {
 		logLevel = slog.LevelError
 	default:
 		logLevel = slog.LevelInfo
+		log.Printf("Unknown log level '%s', defaulting to 'info'", level)
 	}
 
 	opts := &slog.HandlerOptions{Level: logLevel}
 
+	var writer io.Writer
+	switch strings.ToLower(path) {
+	case "", "stderr":
+		writer = os.Stderr
+		log.Printf("Using stderr for logging")
+	case "stdout":
+		writer = os.Stdout
+		log.Printf("Using stdout for logging")
+	default:
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			log.Printf("Failed to open log file %s: %v, falling back to stderr", path, err)
+			writer = os.Stderr
+			log.Printf("Using stderr for logging due to file open error")
+		} else {
+			writer = &bufferedCloseWriter{
+				buffer: bufio.NewWriter(file),
+				file:   file,
+			}
+			log.Printf("Using file %s for logging", path)
+		}
+	}
+
 	var handler slog.Handler
 	if format == "json" {
-		handler = slog.NewJSONHandler(os.Stderr, opts)
+		handler = slog.NewJSONHandler(writer, opts)
+		log.Printf("Logger format set to JSON")
 	} else {
-		handler = slog.NewTextHandler(os.Stderr, opts)
+		handler = slog.NewTextHandler(writer, opts)
+		log.Printf("Logger format set to text")
 	}
 
 	return slog.New(handler).With("plugin", name)
+}
+
+// Add this type and methods
+type bufferedCloseWriter struct {
+	buffer *bufio.Writer
+	file   *os.File
+}
+
+func (w *bufferedCloseWriter) Write(p []byte) (n int, err error) {
+	n, err = w.buffer.Write(p)
+	if err != nil {
+		w.file.Close()
+		return n, err
+	}
+	// Flush after each write to ensure logs are written promptly
+	err = w.buffer.Flush()
+	if err != nil {
+		w.file.Close()
+	}
+	return n, err
+}
+
+func (w *bufferedCloseWriter) Close() error {
+	w.buffer.Flush()
+	return w.file.Close()
 }
 
 // New creates a new plugin instance.
@@ -108,13 +165,15 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		return nil, fmt.Errorf("%s: no config provided", name)
 	}
 
-	// Add debug log using standard log package to verify basic logging works
-	log.Printf("[DEBUG] Creating plugin with log level: %s, format: %s", cfg.LogLevel, cfg.LogFormat)
+	// Create logger first so we can use it for debugging
+	logger := createLogger(name, cfg.LogLevel, cfg.LogFormat, cfg.LogPath)
+	logger.Debug("initializing plugin",
+		"logLevel", cfg.LogLevel,
+		"logFormat", cfg.LogFormat,
+		"logPath", cfg.LogPath)
 
 	if !cfg.Enabled {
-		logger := createLogger(name, cfg.LogLevel, cfg.LogFormat)
-		logger.Info("plugin disabled") // This should show up if disabled
-
+		logger.Info("plugin disabled")
 		return &Plugin{
 			next:    next,
 			name:    name,
@@ -157,11 +216,6 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		}
 	}
 
-	logger := createLogger(name, cfg.LogLevel, cfg.LogFormat)
-	logger.Info("plugin initialized", // This should show up when enabled
-		"allowed_countries", cfg.AllowedCountries,
-		"blocked_countries", cfg.BlockedCountries)
-
 	return &Plugin{
 		next:                 next,
 		name:                 name,
@@ -183,6 +237,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 // ServeHTTP implements the http.Handler interface.
 func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if !p.enabled {
+		p.logger.Info("plugin disabled, passing request through")
 		p.next.ServeHTTP(rw, req)
 		return
 	}
