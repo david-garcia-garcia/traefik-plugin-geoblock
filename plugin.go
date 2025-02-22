@@ -230,8 +230,10 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		return nil, fmt.Errorf("%s: %d is not a valid http status code", name, cfg.DisallowedStatusCode)
 	}
 
-	// Search for database file in plugin directories
-	cfg.DatabaseFilePath = searchFile(cfg.DatabaseFilePath, "IP2LOCATION-LITE-DB1.IPV6.BIN")
+	// Search for database file in plugin directories if path is provided
+	if cfg.DatabaseFilePath != "" {
+		cfg.DatabaseFilePath = searchFile(cfg.DatabaseFilePath, "IP2LOCATION-LITE-DB1.IPV6.BIN")
+	}
 
 	db, err := ip2location.OpenDB(cfg.DatabaseFilePath)
 	if err != nil {
@@ -257,12 +259,14 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 
 	var banHtmlContent string
 
-	cfg.BanHtmlFilePath = searchFile(cfg.BanHtmlFilePath, "geoblockban.html")
-	content, err := os.ReadFile(cfg.BanHtmlFilePath)
-	if err != nil {
-		log.Printf("%s: warning - could not load ban HTML file %s: %v", name, cfg.BanHtmlFilePath, err)
-	} else {
-		banHtmlContent = string(content)
+	if cfg.BanHtmlFilePath != "" {
+		cfg.BanHtmlFilePath = searchFile(cfg.BanHtmlFilePath, "geoblockban.html")
+		content, err := os.ReadFile(cfg.BanHtmlFilePath)
+		if err != nil {
+			log.Printf("%s: warning - could not load ban HTML file %s: %v", name, cfg.BanHtmlFilePath, err)
+		} else {
+			banHtmlContent = string(content)
+		}
 	}
 
 	// Convert slices to maps for O(1) lookup

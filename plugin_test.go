@@ -171,6 +171,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			DatabaseFilePath:     dbFilePath,
 			AllowedCountries:     []string{"DE"},
 			DisallowedStatusCode: http.StatusForbidden,
+			BanHtmlFilePath:      "geoblockban.html",
 		}
 
 		plugin, err := New(context.TODO(), &noopHandler{}, cfg, pluginName)
@@ -202,6 +203,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 			AllowedCountries:     []string{},
 			AllowPrivate:         false,
 			DisallowedStatusCode: http.StatusForbidden,
+			BanHtmlFilePath:      "geoblockban.html",
 		}
 
 		plugin, err := New(context.TODO(), &noopHandler{}, cfg, pluginName)
@@ -386,6 +388,7 @@ func TestPlugin_ServeHTTP_MalformedIP(t *testing.T) {
 				Enabled:              true,
 				DisallowedStatusCode: http.StatusForbidden,
 				BanIfError:           tt.banIfError,
+				DatabaseFilePath:     dbFilePath,
 			}
 
 			// Initialize plugin
