@@ -22,12 +22,9 @@ experimental:
       moduleName: github.com/nscuro/traefik-plugin-geoblock
 ```
 
-#### Pilot
+#### Plugins
 
 ```yaml
-pilot:
-  token: "xxxxxxxxx"
-
 experimental:
   plugins:
     geoblock:
@@ -69,6 +66,8 @@ http:
           allowedIPBlocks: ["66.249.64.0/19"]
           # Add CIDR to be blacklisted, even if in an allowed country or IP block
           blockedIPBlocks: ["66.249.64.5/32"]
+          # Ban requests if IP lookup fails (default: true)
+          banIfError: true
           # Log level (default: "error"). Options: "debug", "info", "warn", "error"
           logLevel: "info"
           # Log format (default: "text"). Options: "json", "text"

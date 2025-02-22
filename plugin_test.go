@@ -65,8 +65,8 @@ func TestNew(t *testing.T) {
 		}
 	})
 
-	t.Run("NoDatabaseFilePath", func(t *testing.T) {
-		plugin, err := New(context.TODO(), &noopHandler{}, &Config{Enabled: true, DisallowedStatusCode: http.StatusForbidden}, pluginName)
+	t.Run("UnableToFindDatabase", func(t *testing.T) {
+		plugin, err := New(context.TODO(), &noopHandler{}, &Config{Enabled: true, DisallowedStatusCode: http.StatusForbidden, DatabaseFilePath: "bad-database"}, pluginName)
 		if err == nil {
 			t.Errorf("expected error, but got none")
 		}

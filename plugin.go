@@ -21,7 +21,7 @@ import (
 //go:generate go run ./tools/dbdownload/main.go -o ./IP2LOCATION-LITE-DB1.IPV6.BIN
 
 // Add this constant near the top of the file, after imports
-const EmptyCountry = "-"
+const PrivateIpCountryAlias = "-"
 
 // Config defines the plugin configuration.
 type Config struct {
@@ -30,6 +30,7 @@ type Config struct {
 	DatabaseFilePath string // Path to ip2location database file
 	DefaultAllow     bool   // Default behavior when IP matches no rules
 	AllowPrivate     bool   // Allow requests from private/internal networks
+	BanIfError       bool   // Ban requests if IP lookup fails
 
 	// Country-based rules (ISO 3166-1 alpha-2 format)
 	AllowedCountries []string // Whitelist of countries to allow
@@ -56,6 +57,7 @@ func CreateConfig() *Config {
 		LogLevel:             "error",  // Default to error logging
 		LogFormat:            "text",   // Default to text format
 		LogPath:              "stdout", // Default to stderr
+		BanIfError:           true,     // Default to banning on errors
 	}
 }
 
@@ -65,10 +67,11 @@ type Plugin struct {
 	name                 string
 	db                   *ip2location.DB
 	enabled              bool
-	allowedCountries     []string
-	blockedCountries     []string
+	allowedCountries     map[string]struct{} // Instead of []string to improve lookup performance
+	blockedCountries     map[string]struct{} // Instead of []string to improve lookup performance
 	defaultAllow         bool
 	allowPrivate         bool
+	banIfError           bool
 	disallowedStatusCode int
 	banHtmlFilePath      string
 	allowedIPBlocks      []*net.IPNet
@@ -145,8 +148,27 @@ func fileExists(filename string) bool {
 	return !info.IsDir()
 }
 
-// searchFile attempts to find the database file in plugin storage directories
+// searchFile looks for a file in the filesystem, handling both direct paths and directory searches.
+// If baseFile is a direct path to an existing file, that path is returned.
+// If baseFile is a directory, it recursively searches for defaultFile within that directory.
+//
+// Parameters:
+//   - baseFile: Either a direct file path or directory to search in
+//   - defaultFile: Filename to search for if baseFile is a directory
+//
+// Returns:
+//   - The path to the found file, or the original baseFile path if not found
+//
+// The function will log errors if the file cannot be found or if there are issues during the search,
+// but will not fail - it always returns a path.
 func searchFile(baseFile string, defaultFile string) string {
+
+	// Return early if baseFile is empty
+	if baseFile == "" {
+		log.Printf("[ERR] baseFile path cannot be empty")
+		return defaultFile
+	}
+
 	// Check if the file exists at the specified path
 	if fileExists(baseFile) {
 		return baseFile
@@ -209,11 +231,6 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		return nil, fmt.Errorf("%s: %d is not a valid http status code", name, cfg.DisallowedStatusCode)
 	}
 
-	if cfg.DatabaseFilePath == "" {
-		// For Traefik plugins, use a relative path from the plugin directory
-		cfg.DatabaseFilePath = "IP2LOCATION-LITE-DB1.IPV6.BIN"
-	}
-
 	// Search for database file in plugin directories
 	cfg.DatabaseFilePath = searchFile(cfg.DatabaseFilePath, "IP2LOCATION-LITE-DB1.IPV6.BIN")
 
@@ -250,15 +267,27 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		}
 	}
 
+	// Convert slices to maps for O(1) lookup
+	allowedCountries := make(map[string]struct{}, len(cfg.AllowedCountries))
+	for _, c := range cfg.AllowedCountries {
+		allowedCountries[c] = struct{}{}
+	}
+
+	blockedCountries := make(map[string]struct{}, len(cfg.BlockedCountries))
+	for _, c := range cfg.BlockedCountries {
+		blockedCountries[c] = struct{}{}
+	}
+
 	return &Plugin{
 		next:                 next,
 		name:                 name,
 		db:                   db,
 		enabled:              cfg.Enabled,
-		allowedCountries:     cfg.AllowedCountries,
-		blockedCountries:     cfg.BlockedCountries,
+		allowedCountries:     allowedCountries,
+		blockedCountries:     blockedCountries,
 		defaultAllow:         cfg.DefaultAllow,
 		allowPrivate:         cfg.AllowPrivate,
+		banIfError:           cfg.BanIfError,
 		disallowedStatusCode: cfg.DisallowedStatusCode,
 		banHtmlFilePath:      cfg.BanHtmlFilePath,
 		allowedIPBlocks:      allowedIPBlocks,
@@ -292,8 +321,12 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				"method", req.Method,
 				"path", req.URL.Path,
 				"error", err)
-			p.serveBanHtml(rw, ip, "Unknown")
-			return
+
+			if p.banIfError {
+				p.serveBanHtml(rw, ip, "Unknown")
+				return
+			}
+			// Do nothing, keep looping.
 		}
 		if !allowed {
 			var ipChain string = ""
@@ -375,28 +408,27 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 	}
 
 	// Handle private/internal network IPs
-	if country == EmptyCountry {
+	if country == PrivateIpCountryAlias {
 		return p.allowPrivate, country, nil
 	}
 
-	// Check country-based rules
-	if country != EmptyCountry {
-		for _, item := range p.blockedCountries {
-			if item == country {
-				blockedCountry = true
-
-				break
-			}
+	// Use map lookups instead of slice iteration
+	if country != PrivateIpCountryAlias {
+		if _, blocked := p.blockedCountries[country]; blocked {
+			return false, country, nil
 		}
-
-		for _, item := range p.allowedCountries {
-			if item == country {
-				allowedCountry = true
-			}
+		if _, allowed := p.allowedCountries[country]; allowed {
+			return true, country, nil
 		}
 	}
 
-	blocked, blockedNetworkLength, err := p.isBlockedIPBlocks(ip)
+	// Parse IP address once
+	ipAddr := net.ParseIP(ip)
+	if ipAddr == nil {
+		return false, ip, fmt.Errorf("unable to parse IP address from [%s]", ip)
+	}
+
+	blocked, blockedNetworkLength, err := p.isBlockedIPBlocks(ipAddr)
 	if err != nil {
 		return false, ip, fmt.Errorf("failed to check if IP %q is blocked by IP block: %w", ip, err)
 	}
@@ -405,13 +437,7 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 		blockedIP = true
 	}
 
-	for _, allowedCountry := range p.allowedCountries {
-		if allowedCountry == country {
-			return true, ip, nil
-		}
-	}
-
-	allowed, allowedNetBits, err := p.isAllowedIPBlocks(ip)
+	allowed, allowedNetBits, err := p.isAllowedIPBlocks(ipAddr)
 	if err != nil {
 		return false, ip, fmt.Errorf("failed to check if IP %q is allowed by IP block: %w", ip, err)
 	}
@@ -484,27 +510,20 @@ func initIPBlocks(ipBlocks []string) ([]*net.IPNet, error) {
 }
 
 // isAllowedIPBlocks checks if an IP is allowed base on the allowed CIDR blocks
-func (p Plugin) isAllowedIPBlocks(ip string) (bool, int, error) {
-	return p.isInIPBlocks(ip, p.allowedIPBlocks)
+func (p Plugin) isAllowedIPBlocks(ipAddr net.IP) (bool, int, error) {
+	return p.isInIPBlocks(ipAddr, p.allowedIPBlocks)
 }
 
 // isBlockedIPBlocks checks if an IP is allowed base on the blocked CIDR blocks
-func (p Plugin) isBlockedIPBlocks(ip string) (bool, int, error) {
-	return p.isInIPBlocks(ip, p.blockedIPBlocks)
+func (p Plugin) isBlockedIPBlocks(ipAddr net.IP) (bool, int, error) {
+	return p.isInIPBlocks(ipAddr, p.blockedIPBlocks)
 }
 
 // isInIPBlocks indicates whether the given IP exists in any of the IP subnets contained within ipBlocks.
-func (p Plugin) isInIPBlocks(ip string, ipBlocks []*net.IPNet) (bool, int, error) {
-	ipAddress := net.ParseIP(ip)
-
-	if ipAddress == nil {
-		return false, 0, fmt.Errorf("unable parse IP address from address [%s]", ip)
-	}
-
+func (p Plugin) isInIPBlocks(ipAddr net.IP, ipBlocks []*net.IPNet) (bool, int, error) {
 	for _, block := range ipBlocks {
-		if block.Contains(ipAddress) {
+		if block.Contains(ipAddr) {
 			ones, _ := block.Mask.Size()
-
 			return true, ones, nil
 		}
 	}
@@ -518,7 +537,7 @@ func (p Plugin) serveBanHtml(rw http.ResponseWriter, ip, country string) {
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rw.WriteHeader(p.disallowedStatusCode)
 
-		if country == EmptyCountry || country == "" {
+		if country == PrivateIpCountryAlias || country == "" {
 			country = "Unknown"
 		}
 
