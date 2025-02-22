@@ -397,9 +397,6 @@ func cleanIPAddress(ip string) string {
 // - country: the detected country code for the IP
 // - err: any errors encountered during the check
 func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) {
-	var allowedIP, blockedIP bool
-	var allowedNetworkLength, blockedNetworkLength int
-
 	// Discrete IPs have higher priority than countries
 	// so deal with them before doing any lookups
 	ipAddr := net.ParseIP(ip)
@@ -418,33 +415,24 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 		return false, ip, fmt.Errorf("failed to check if IP %q is blocked by IP block: %w", ip, err)
 	}
 
-	if blocked {
-		blockedIP = true
-	}
-
-	allowed, allowedNetBits, err := p.isAllowedIPBlocks(ipAddr)
+	allowed, allowedNetworkLength, err := p.isAllowedIPBlocks(ipAddr)
 	if err != nil {
 		return false, ip, fmt.Errorf("failed to check if IP %q is allowed by IP block: %w", ip, err)
 	}
 
-	if allowed {
-		allowedIP = true
-		allowedNetworkLength = allowedNetBits
-	}
-
-	// NB: whichever matched prefix is longer has higher priority: more specific to less specific.
-	if allowedNetworkLength < blockedNetworkLength {
-		if blockedIP {
+	// NB: whichever matched prefix is longer has higher priority: more specific to less specific only if both matched.
+	if (allowedNetworkLength < blockedNetworkLength) && (allowedNetworkLength > 0) && (blockedNetworkLength > 0) {
+		if blocked {
 			return false, country, nil
 		}
-		if allowedIP {
+		if allowed {
 			return true, country, nil
 		}
 	} else {
-		if allowedIP {
+		if allowed {
 			return true, country, nil
 		}
-		if blockedIP {
+		if blocked {
 			return false, country, nil
 		}
 	}
