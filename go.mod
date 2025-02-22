@@ -1,7 +1,5 @@
 module github.com/nscuro/traefik-plugin-geoblock
 
-go 1.19
+go 1.21
 
-require github.com/ip2location/ip2location-go/v9 v9.7.1
-
-require lukechampine.com/uint128 v1.3.0 // indirect
+require github.com/ip2location/ip2location-go/v9 v9.5.0
