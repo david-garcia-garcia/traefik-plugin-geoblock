@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -186,6 +187,12 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		if rr.Code != http.StatusForbidden {
 			t.Errorf("expected status code %d, but got: %d", http.StatusForbidden, rr.Code)
 		}
+
+		// Check that response contains the IP address
+		body := rr.Body.String()
+		if !strings.Contains(body, "1.1.1.1") {
+			t.Errorf("expected response to contain IP address '1.1.1.1', but got: %s", body)
+		}
 	})
 
 	t.Run("DisallowedPrivate", func(t *testing.T) {
@@ -210,6 +217,12 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 
 		if rr.Code != http.StatusForbidden {
 			t.Errorf("expected status code %d, but got: %d", http.StatusForbidden, rr.Code)
+		}
+
+		// Check that response contains the IP address
+		body := rr.Body.String()
+		if !strings.Contains(body, "192.168.178.66") {
+			t.Errorf("expected response to contain IP address '192.168.178.66', but got: %s", body)
 		}
 	})
 

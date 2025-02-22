@@ -257,14 +257,13 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 	}
 
 	var banHtmlContent string
-	if cfg.BanHtmlFilePath != "" {
-		cfg.BanHtmlFilePath = searchFile(cfg.BanHtmlFilePath, "geoblockban.html")
-		content, err := os.ReadFile(cfg.BanHtmlFilePath)
-		if err != nil {
-			log.Printf("%s: warning - could not load ban HTML file %s: %v", name, cfg.BanHtmlFilePath, err)
-		} else {
-			banHtmlContent = string(content)
-		}
+
+	cfg.BanHtmlFilePath = searchFile(cfg.BanHtmlFilePath, "geoblockban.html")
+	content, err := os.ReadFile(cfg.BanHtmlFilePath)
+	if err != nil {
+		log.Printf("%s: warning - could not load ban HTML file %s: %v", name, cfg.BanHtmlFilePath, err)
+	} else {
+		banHtmlContent = string(content)
 	}
 
 	// Convert slices to maps for O(1) lookup
@@ -300,7 +299,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 // ServeHTTP implements the http.Handler interface.
 func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if !p.enabled {
-		p.logger.Info("plugin disabled, passing request through")
+		p.logger.Debug("plugin disabled, passing request through")
 		p.next.ServeHTTP(rw, req)
 		return
 	}
