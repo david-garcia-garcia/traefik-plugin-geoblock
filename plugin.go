@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -100,8 +101,6 @@ func createLogger(name, level, format, path string) *slog.Logger {
 		Level: logLevel,
 	}
 
-	log.Printf("[ERROR] PATH PATH: %v", path)
-
 	var writer io.Writer
 	switch strings.ToLower(path) {
 	case "", "stderr", "/dev/stderr":
@@ -138,6 +137,48 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	return slog.New(handler).With("plugin", name)
 }
 
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
+// searchDatabaseFile attempts to find the database file in plugin storage directories
+func searchDatabaseFile(baseFile string) string {
+	const defaultDBFile = "IP2LOCATION-LITE-DB1.IPV6.BIN"
+
+	// Check if the file exists at the specified path
+	if fileExists(baseFile) {
+		return baseFile
+	}
+
+	err := filepath.Walk(baseFile, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip errors and continue walking
+		}
+		if !info.IsDir() {
+			if filepath.Base(path) == defaultDBFile {
+				baseFile = path         // Update baseFile with the found path
+				return filepath.SkipAll // Stop walking once found
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		// Log error but continue with original path
+		log.Printf("[ERR] Error searching for database file: %v", err)
+	}
+
+	if !fileExists(baseFile) {
+		log.Printf("[ERR] Could not find database file %s in %v", defaultDBFile, baseFile)
+	}
+
+	return baseFile // Return found path or original path if not found
+}
+
 // New creates a new plugin instance.
 func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.Handler, error) {
 	if next == nil {
@@ -171,8 +212,12 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 	}
 
 	if cfg.DatabaseFilePath == "" {
-		return nil, fmt.Errorf("%s: no database file path configured", name)
+		// For Traefik plugins, use a relative path from the plugin directory
+		cfg.DatabaseFilePath = "IP2LOCATION-LITE-DB1.IPV6.BIN"
 	}
+
+	// Search for database file in plugin directories
+	cfg.DatabaseFilePath = searchDatabaseFile(cfg.DatabaseFilePath)
 
 	db, err := ip2location.OpenDB(cfg.DatabaseFilePath)
 	if err != nil {

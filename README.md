@@ -48,6 +48,9 @@ http:
           # HTML served when a request is blocked
           banHtmlFilePath: /plugins-local/src/github.com/nscuro/ban.html
           # Path to ip2location database file
+          # Can be either:
+          #   - Direct path to the database file
+          #   - Directory path that will be recursively searched for IP2LOCATION-LITE-DB1.IPV6.BIN (use /plugins-storage/sources if you have traefik pull the plugin from github)
           databaseFilePath: /plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN
           # Whitelist of countries to allow (ISO 3166-1 alpha-2)
           allowedCountries: [ "AT", "CH", "DE" ]
