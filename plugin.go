@@ -105,37 +105,38 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	}
 
 	var writer io.Writer
+	var destination string
 	switch strings.ToLower(path) {
 	case "", "stderr", "/dev/stderr":
 		writer = os.Stderr
+		destination = "stderr"
 	case "stdout", "/dev/stdout":
 		writer = os.Stdout
+		destination = "stdout"
 	case "/dev/null", "null", "none", "off":
 		writer = io.Discard
+		destination = "null"
 	default:
-		// Create buffered writer with 1KB buffer size and 2 second flush timeout
-		// We cannot use SYSCALL to flush the buffer or rotate as traefik does,
-		// opening and closing the file on every write is not efficient, and
-		// keeping the file open will break rotation. These parameters are now harcoded
-		// but could be passed in as part of the config.
 		bw, err := newBufferedFileWriter(path, 1024, 2*time.Second)
 		if err != nil {
 			log.Printf("[ERROR] Failed to create buffered file writer: %v", err)
 			writer = os.Stderr
+			destination = "stderr"
 		} else {
 			writer = bw
-			log.Printf("[INFO] Using buffered file writer for %s (32KB buffer, 5s flush)", path)
+			destination = path
 		}
 	}
 
 	var handler slog.Handler
 	if format == "json" {
 		handler = slog.NewJSONHandler(writer, opts)
-		log.Printf("[INFO] Logger format set to JSON")
 	} else {
 		handler = slog.NewTextHandler(writer, opts)
-		log.Printf("[INFO] Logger format set to text")
+		format = "text" // normalize format name
 	}
+
+	log.Printf("[INFO] Logging to %s with format %s", destination, format)
 
 	return slog.New(handler).With("plugin", name)
 }
