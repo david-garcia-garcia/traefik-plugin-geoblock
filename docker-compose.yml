@@ -52,7 +52,7 @@ services:
       - "traefik.http.services.service-bar.loadbalancer.server.port=80"
       - "traefik.http.middlewares.geoblock.plugin.geoblock.enabled=true"
       - "traefik.http.middlewares.geoblock.plugin.geoblock.loglevel=DEBUG"
-      - "traefik.http.middlewares.geoblock.plugin.geoblock.logpath=/dev/stdout"
+      - "traefik.http.middlewares.geoblock.plugin.geoblock.logpath=/var/log/buffered.log"
       - "traefik.http.middlewares.geoblock.plugin.geoblock.logformat=json"
       - "traefik.http.middlewares.geoblock.plugin.geoblock.databaseFilePath=/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN"
       - "traefik.http.middlewares.geoblock.plugin.geoblock.banHtmlFilePath=/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/ban.html"

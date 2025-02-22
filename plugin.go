@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"log/slog"
 
@@ -66,23 +67,6 @@ type Plugin struct {
 	logger               *slog.Logger
 }
 
-// Replace bufferedCloseWriter with simpleFileWriter
-type simpleFileWriter struct {
-	path string
-}
-
-func (w *simpleFileWriter) Write(p []byte) (n int, err error) {
-	// Opening and closing the file is not efficient, but's makes handling log rotation easier
-	// TODO: Either do what traefik does (listen to USR1 signal and rotate) or use a buffered writer with a timeout
-	file, err := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		return 0, err
-	}
-	defer file.Close()
-
-	return file.Write(p)
-}
-
 // Update createLogger to use simpleFileWriter
 func createLogger(name, level, format, path string) *slog.Logger {
 	var logLevel slog.Level
@@ -112,8 +96,15 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	case "stdout":
 		writer = os.Stdout
 	default:
-		writer = &simpleFileWriter{path: path}
-		log.Printf("[INFO] Using file %s for logging", path)
+		// Create buffered writer with 1KB buffer size and 2 second flush timeout
+		bw, err := newBufferedFileWriter(path, 1024, 2*time.Second)
+		if err != nil {
+			log.Printf("[ERROR] Failed to create buffered file writer: %v", err)
+			writer = os.Stderr
+		} else {
+			writer = bw
+			log.Printf("[INFO] Using buffered file writer for %s (32KB buffer, 5s flush)", path)
+		}
 	}
 
 	var handler slog.Handler
