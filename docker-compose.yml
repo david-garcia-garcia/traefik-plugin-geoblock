@@ -16,7 +16,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - logs-local:/var/log/traefik
-      - './ban.html:/ban.html:ro'
+      - './geoblockban.html:/geoblockban.html:ro'
       - ./:/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock
     ports:
       - 8000:80
@@ -37,7 +37,7 @@ services:
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.logpath=/dev/stderr"
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.logformat="
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.databaseFilePath=/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN"
-      - "traefik.http.middlewares.geoblock2.plugin.geoblock.banHtmlFilePath=/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/ban.html"
+      - "traefik.http.middlewares.geoblock2.plugin.geoblock.banHtmlFilePath=/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/geoblockban.html"
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.allowPrivate=true"
 
   whoami2:
@@ -55,6 +55,6 @@ services:
       - "traefik.http.middlewares.geoblock.plugin.geoblock.logpath=/dev/stderr"
       - "traefik.http.middlewares.geoblock.plugin.geoblock.logformat="
       - "traefik.http.middlewares.geoblock.plugin.geoblock.databaseFilePath=/plugins-local"
-      - "traefik.http.middlewares.geoblock.plugin.geoblock.banHtmlFilePath=/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/ban.html"
+      - "traefik.http.middlewares.geoblock.plugin.geoblock.banHtmlFilePath=/plugins-local"
 volumes:
   logs-local:

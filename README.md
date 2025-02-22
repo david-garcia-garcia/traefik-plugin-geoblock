@@ -46,7 +46,10 @@ http:
           # Enable this plugin?
           enabled: true
           # HTML served when a request is blocked
-          banHtmlFilePath: /plugins-local/src/github.com/nscuro/ban.html
+          # Can be either:
+          #   - Direct path to the HTML file
+          #   - Directory path that will be recursively searched for geoblockban.html
+          banHtmlFilePath: /plugins-local/src/github.com/nscuro/geoblockban.html
           # Path to ip2location database file
           # Can be either:
           #   - Direct path to the database file

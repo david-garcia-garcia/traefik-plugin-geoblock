@@ -145,10 +145,8 @@ func fileExists(filename string) bool {
 	return !info.IsDir()
 }
 
-// searchDatabaseFile attempts to find the database file in plugin storage directories
-func searchDatabaseFile(baseFile string) string {
-	const defaultDBFile = "IP2LOCATION-LITE-DB1.IPV6.BIN"
-
+// searchFile attempts to find the database file in plugin storage directories
+func searchFile(baseFile string, defaultFile string) string {
 	// Check if the file exists at the specified path
 	if fileExists(baseFile) {
 		return baseFile
@@ -159,7 +157,7 @@ func searchDatabaseFile(baseFile string) string {
 			return nil // Skip errors and continue walking
 		}
 		if !info.IsDir() {
-			if filepath.Base(path) == defaultDBFile {
+			if filepath.Base(path) == defaultFile {
 				baseFile = path         // Update baseFile with the found path
 				return filepath.SkipAll // Stop walking once found
 			}
@@ -169,11 +167,11 @@ func searchDatabaseFile(baseFile string) string {
 
 	if err != nil {
 		// Log error but continue with original path
-		log.Printf("[ERR] Error searching for database file: %v", err)
+		log.Printf("[ERR] Error searching for file: %v", err)
 	}
 
 	if !fileExists(baseFile) {
-		log.Printf("[ERR] Could not find database file %s in %v", defaultDBFile, baseFile)
+		log.Printf("[ERR] Could not find file %s in %v", defaultFile, baseFile)
 	}
 
 	return baseFile // Return found path or original path if not found
@@ -217,7 +215,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 	}
 
 	// Search for database file in plugin directories
-	cfg.DatabaseFilePath = searchDatabaseFile(cfg.DatabaseFilePath)
+	cfg.DatabaseFilePath = searchFile(cfg.DatabaseFilePath, "IP2LOCATION-LITE-DB1.IPV6.BIN")
 
 	db, err := ip2location.OpenDB(cfg.DatabaseFilePath)
 	if err != nil {
@@ -243,6 +241,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 
 	var banHtmlContent string
 	if cfg.BanHtmlFilePath != "" {
+		cfg.BanHtmlFilePath = searchFile(cfg.BanHtmlFilePath, "geoblockban.html")
 		content, err := os.ReadFile(cfg.BanHtmlFilePath)
 		if err != nil {
 			log.Printf("%s: warning - could not load ban HTML file %s: %v", name, cfg.BanHtmlFilePath, err)
