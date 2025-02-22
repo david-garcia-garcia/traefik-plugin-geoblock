@@ -105,7 +105,9 @@ func createLogger(name, level, format, path string) *slog.Logger {
 		logLevel = slog.LevelError
 	default:
 		logLevel = slog.LevelInfo
-		log.Printf("Unknown log level '%s', defaulting to 'info'", level)
+		if level != "" {
+			log.Printf("[WARN] Unknown log level '%s', defaulting to 'info'", level)
+		}
 	}
 
 	opts := &slog.HandlerOptions{Level: logLevel}
@@ -114,22 +116,20 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	switch strings.ToLower(path) {
 	case "", "stderr":
 		writer = os.Stderr
-		log.Printf("Using stderr for logging")
 	case "stdout":
 		writer = os.Stdout
-		log.Printf("Using stdout for logging")
 	default:
 		writer = &simpleFileWriter{path: path}
-		log.Printf("Using file %s for logging", path)
+		log.Printf("[INFO] Using file %s for logging", path)
 	}
 
 	var handler slog.Handler
 	if format == "json" {
 		handler = slog.NewJSONHandler(writer, opts)
-		log.Printf("Logger format set to JSON")
+		log.Printf("[INFO] Logger format set to JSON")
 	} else {
 		handler = slog.NewTextHandler(writer, opts)
-		log.Printf("Logger format set to text")
+		log.Printf("[INFO] Logger format set to text")
 	}
 
 	return slog.New(handler).With("plugin", name)

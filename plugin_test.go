@@ -74,6 +74,19 @@ func TestNew(t *testing.T) {
 			t.Error("expected plugin to be nil, but is not")
 		}
 	})
+
+	t.Run("InvalidDatabaseVersion", func(t *testing.T) {
+		plugin, err := New(context.TODO(), &noopHandler{}, &Config{
+			Enabled:          true,
+			DatabaseFilePath: "./testdata/invalid.bin",
+		}, pluginName)
+		if err == nil {
+			t.Errorf("expected error about invalid database version, but got none")
+		}
+		if plugin != nil {
+			t.Error("expected plugin to be nil, but is not")
+		}
+	})
 }
 
 func TestPlugin_ServeHTTP(t *testing.T) {
@@ -81,7 +94,7 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		cfg := &Config{
 			Enabled:              true,
 			DatabaseFilePath:     dbFilePath,
-			AllowedCountries:     []string{"US"},
+			AllowedCountries:     []string{"AU"},
 			DisallowedStatusCode: http.StatusOK,
 		}
 
