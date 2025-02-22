@@ -21,7 +21,7 @@ import (
 //go:generate go run ./tools/dbdownload/main.go -o ./IP2LOCATION-LITE-DB1.IPV6.BIN
 
 // Add this constant near the top of the file, after imports
-const PrivateIpCountryAlias = "-"
+const PrivateIpCountryAlias = "PRIV"
 
 // Config defines the plugin configuration.
 type Config struct {
@@ -253,7 +253,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 
 	blockedIPBlocks, err := initIPBlocks(cfg.BlockedIPBlocks)
 	if err != nil {
-		return nil, fmt.Errorf("%s: failed loading allowed CIDR blocks: %w", name, err)
+		return nil, fmt.Errorf("%s: failed loading blocked CIDR blocks: %w", name, err)
 	}
 
 	var banHtmlContent string
@@ -398,34 +398,19 @@ func cleanIPAddress(ip string) string {
 // - country: the detected country code for the IP
 // - err: any errors encountered during the check
 func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) {
-	var allowedCountry, allowedIP, blockedCountry, blockedIP bool
+	var allowedIP, blockedIP bool
 	var allowedNetworkLength, blockedNetworkLength int
 
-	// Look up the country for this IP
-	country, err = p.Lookup(ip)
-	if err != nil {
-		return false, ip, fmt.Errorf("lookup of %s failed: %w", ip, err)
-	}
-
-	// Handle private/internal network IPs
-	if country == PrivateIpCountryAlias {
-		return p.allowPrivate, country, nil
-	}
-
-	// Use map lookups instead of slice iteration
-	if country != PrivateIpCountryAlias {
-		if _, blocked := p.blockedCountries[country]; blocked {
-			return false, country, nil
-		}
-		if _, allowed := p.allowedCountries[country]; allowed {
-			return true, country, nil
-		}
-	}
-
-	// Parse IP address once
+	// Discrete IPs have higher priority than countries
+	// so deal with them before doing any lookups
 	ipAddr := net.ParseIP(ip)
 	if ipAddr == nil {
 		return false, ip, fmt.Errorf("unable to parse IP address from [%s]", ip)
+	}
+
+	// Check if IP is private before proceeding with other checks
+	if ipAddr.IsPrivate() {
+		return p.allowPrivate, PrivateIpCountryAlias, nil
 	}
 
 	blocked, blockedNetworkLength, err := p.isBlockedIPBlocks(ipAddr)
@@ -447,10 +432,6 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 		allowedNetworkLength = allowedNetBits
 	}
 
-	// Handle final values
-	//
-	// NB: discrete IPs have higher priority than countries:  more specific to less specific.
-
 	// NB: whichever matched prefix is longer has higher priority: more specific to less specific.
 	if allowedNetworkLength < blockedNetworkLength {
 		if blockedIP {
@@ -468,10 +449,21 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 		}
 	}
 
-	if allowedCountry {
+	// Look up the country for this IP
+	country, err = p.Lookup(ip)
+	if err != nil {
+		return false, ip, fmt.Errorf("lookup of %s failed: %w", ip, err)
+	}
+
+	// Check if country is in the allowlist (using O(1) map lookup)
+	// If found, allow the request immediately
+	if _, allowed := p.allowedCountries[country]; allowed {
 		return true, country, nil
 	}
-	if blockedCountry {
+
+	// Check if country is in the blocklist (using O(1) map lookup)
+	// If found, block the request immediately
+	if _, blocked := p.blockedCountries[country]; blocked {
 		return false, country, nil
 	}
 
@@ -536,10 +528,6 @@ func (p Plugin) serveBanHtml(rw http.ResponseWriter, ip, country string) {
 	if p.banHtmlContent != "" {
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rw.WriteHeader(p.disallowedStatusCode)
-
-		if country == PrivateIpCountryAlias || country == "" {
-			country = "Unknown"
-		}
 
 		// Simple string replacements
 		content := p.banHtmlContent
