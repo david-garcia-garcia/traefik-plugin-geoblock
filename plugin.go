@@ -54,7 +54,7 @@ type Config struct {
 func CreateConfig() *Config {
 	return &Config{
 		DisallowedStatusCode: http.StatusForbidden,
-		LogLevel:             "error",  // Default to error logging
+		LogLevel:             "info",   // Default to info logging
 		LogFormat:            "text",   // Default to text format
 		LogPath:              "stdout", // Default to stderr
 		BanIfError:           true,     // Default to banning on errors
@@ -73,7 +73,6 @@ type Plugin struct {
 	allowPrivate         bool
 	banIfError           bool
 	disallowedStatusCode int
-	banHtmlFilePath      string
 	allowedIPBlocks      []*net.IPNet
 	blockedIPBlocks      []*net.IPNet
 	banHtmlContent       string // Changed from banHtmlTemplate
@@ -96,7 +95,7 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	default:
 		logLevel = slog.LevelInfo
 		if level != "" {
-			fmt.Printf("[WARN] Unknown log level '%s', defaulting to 'info'\n", level)
+			log.Printf("[WARN] Unknown log level '%s', defaulting to 'info'\n", level)
 		}
 	}
 
@@ -113,7 +112,7 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	if path != "" {
 		bw, err := newBufferedFileWriter(path, 1024, 2*time.Second)
 		if err != nil {
-			fmt.Printf("[ERROR] Failed to create buffered file writer: %v\n", err)
+			log.Printf("[ERROR] Failed to create buffered file writer: %v\n", err)
 		} else {
 			writer = bw
 			destination = path
@@ -129,7 +128,7 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	}
 
 	log.Printf("[INFO] Logging to %s with format %s at level %s\n", destination, format, level)
-
+	slog.Debug("logging to", "destination", destination, "format", format, "level", level)
 	return slog.New(handler).With("plugin", name)
 }
 
@@ -139,7 +138,7 @@ type traefikLogWriter struct{}
 func (w *traefikLogWriter) Write(p []byte) (n int, err error) {
 	// https://github.com/traefik/traefik/issues/8204
 	// Since v2.5.5, fmt.Println()/fmt.Printf() are catched and transfered to the Traefik logs, it's not perfect but we will improve that.
-	fmt.Println(string(p))
+	log.Println(string(p))
 	return len(p), nil
 }
 
@@ -219,7 +218,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		"logPath", cfg.LogPath)
 
 	if !cfg.Enabled {
-		logger.Info("plugin disabled")
+		logger.Warn("plugin disabled")
 		return &Plugin{
 			next:    next,
 			name:    name,
@@ -294,7 +293,6 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		allowPrivate:         cfg.AllowPrivate,
 		banIfError:           cfg.BanIfError,
 		disallowedStatusCode: cfg.DisallowedStatusCode,
-		banHtmlFilePath:      cfg.BanHtmlFilePath,
 		allowedIPBlocks:      allowedIPBlocks,
 		blockedIPBlocks:      blockedIPBlocks,
 		banHtmlContent:       banHtmlContent,
