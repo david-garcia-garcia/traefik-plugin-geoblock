@@ -325,3 +325,62 @@ func TestPlugin_Lookup(t *testing.T) {
 		}
 	})
 }
+
+func TestPlugin_ServeHTTP_MalformedIP(t *testing.T) {
+	tests := []struct {
+		name       string
+		banIfError bool
+		ip         string
+		wantStatus int
+	}{
+		{
+			name:       "malformed IP with banIfError true",
+			banIfError: true,
+			ip:         "not.an.ip.address",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "malformed IP with banIfError false",
+			banIfError: false,
+			ip:         "not.an.ip.address",
+			wantStatus: http.StatusOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a test response recorder
+			rr := httptest.NewRecorder()
+
+			// Create a test request with the malformed IP
+			req := httptest.NewRequest("GET", "/", nil)
+			req.Header.Set("X-Forwarded-For", tt.ip)
+
+			// Create a mock next handler that always returns 200 OK
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+
+			// Create plugin config
+			cfg := &Config{
+				Enabled:              true,
+				DisallowedStatusCode: http.StatusForbidden,
+				BanIfError:           tt.banIfError,
+			}
+
+			// Initialize plugin
+			plugin, err := New(context.Background(), next, cfg, "test")
+			if err != nil {
+				t.Fatalf("Failed to create plugin: %v", err)
+			}
+
+			// Serve the request
+			plugin.ServeHTTP(rr, req)
+
+			// Check the status code
+			if rr.Code != tt.wantStatus {
+				t.Errorf("ServeHTTP() status = %v, want %v", rr.Code, tt.wantStatus)
+			}
+		})
+	}
+}

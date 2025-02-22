@@ -325,7 +325,8 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				p.serveBanHtml(rw, ip, "Unknown")
 				return
 			}
-			// Do nothing, keep looping.
+			// keel looping
+			continue
 		}
 		if !allowed {
 			var ipChain string = ""
