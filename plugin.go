@@ -24,19 +24,28 @@ const EmptyCountry = "-"
 
 // Config defines the plugin configuration.
 type Config struct {
-	Enabled              bool     // Enable this plugin?
-	DatabaseFilePath     string   // Path to ip2location database file
-	AllowedCountries     []string // Whitelist of countries to allow (ISO 3166-1 alpha-2)
-	BlockedCountries     []string // Blocklist of countries to be blocked (ISO 3166-1 alpha-2)
-	DefaultAllow         bool     // If source matches neither blocklist nor whitelist, should it be allowed through?
-	AllowPrivate         bool     // Allow requests from private / internal networks?
-	DisallowedStatusCode int      // HTTP status code to return for disallowed requests
-	BanHtmlFilePath      string   // Path to HTML file to serve for banned requests
-	AllowedIPBlocks      []string // List of whitelist CIDR
-	BlockedIPBlocks      []string // List of blocklisted CIDRs
-	LogLevel             string   // "debug", "info", "warn", "error"
-	LogFormat            string   // "json" or "text"
-	LogPath              string   // Path to log file ("stdout", "stderr", or file path)
+	// Core settings
+	Enabled          bool   // Enable/disable the plugin
+	DatabaseFilePath string // Path to ip2location database file
+	DefaultAllow     bool   // Default behavior when IP matches no rules
+	AllowPrivate     bool   // Allow requests from private/internal networks
+
+	// Country-based rules (ISO 3166-1 alpha-2 format)
+	AllowedCountries []string // Whitelist of countries to allow
+	BlockedCountries []string // Blocklist of countries to block
+
+	// IP-based rules
+	AllowedIPBlocks []string // Whitelist of CIDR blocks
+	BlockedIPBlocks []string // Blocklist of CIDR blocks
+
+	// Response settings
+	DisallowedStatusCode int    // HTTP status code for blocked requests
+	BanHtmlFilePath      string // Custom HTML template for blocked requests
+
+	// Logging configuration
+	LogLevel  string // Log level: "debug", "info", "warn", "error"
+	LogFormat string // Log format: "json" or "text"
+	LogPath   string // Log destination: "stdout", "stderr", or file path
 }
 
 // CreateConfig creates the default plugin configuration.
@@ -97,6 +106,10 @@ func createLogger(name, level, format, path string) *slog.Logger {
 		writer = os.Stdout
 	default:
 		// Create buffered writer with 1KB buffer size and 2 second flush timeout
+		// We cannot use SYSCALL to flush the buffer or rotate as traefik does,
+		// opening and closing the file on every write is not efficient, and
+		// keeping the file open will break rotation. These parameters are now harcoded
+		// but could be passed in as part of the config.
 		bw, err := newBufferedFileWriter(path, 1024, 2*time.Second)
 		if err != nil {
 			log.Printf("[ERROR] Failed to create buffered file writer: %v", err)
@@ -285,21 +298,28 @@ func cleanIPAddress(ip string) string {
 	return ip // If no port, return the original IP
 }
 
-// CheckAllowed checks whether a given IP address is allowed according to the configured allowed countries.
+// CheckAllowed determines if an IP address should be allowed through based on configured rules.
+// Returns:
+// - allow: whether the request should be allowed
+// - country: the detected country code for the IP
+// - err: any errors encountered during the check
 func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) {
 	var allowedCountry, allowedIP, blockedCountry, blockedIP bool
 	var allowedNetworkLength, blockedNetworkLength int
 
+	// Look up the country for this IP
 	country, err = p.Lookup(ip)
 	if err != nil {
 		return false, ip, fmt.Errorf("lookup of %s failed: %w", ip, err)
 	}
 
+	// Handle private/internal network IPs
 	if country == EmptyCountry {
 		return p.allowPrivate, country, nil
 	}
 
-	if country != "-" {
+	// Check country-based rules
+	if country != EmptyCountry {
 		for _, item := range p.blockedCountries {
 			if item == country {
 				blockedCountry = true
@@ -349,7 +369,6 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 		if blockedIP {
 			return false, country, nil
 		}
-
 		if allowedIP {
 			return true, country, nil
 		}
@@ -357,7 +376,6 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 		if allowedIP {
 			return true, country, nil
 		}
-
 		if blockedIP {
 			return false, country, nil
 		}
@@ -366,7 +384,6 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 	if allowedCountry {
 		return true, country, nil
 	}
-
 	if blockedCountry {
 		return false, country, nil
 	}
