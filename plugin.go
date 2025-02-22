@@ -176,6 +176,14 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		return nil, fmt.Errorf("%s: failed to open database: %w", name, err)
 	}
 
+	// Check database version
+	version, err := GetDatabaseVersion(cfg.DatabaseFilePath)
+	if err != nil {
+		logger.Warn("failed to read database version", "error", err)
+	} else {
+		logger.Info("database version", "version", version.String())
+	}
+
 	allowedIPBlocks, err := initIPBlocks(cfg.AllowedIPBlocks)
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed loading allowed CIDR blocks: %w", name, err)
