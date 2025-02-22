@@ -31,10 +31,10 @@ func (v DBVersion) String() string {
 // It returns the version information or an error if the version cannot be read.
 func GetDatabaseVersion(filepath string) (*DBVersion, error) {
 	file, err := os.Open(filepath)
-	defer file.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database file: %w", err)
 	}
+	defer file.Close()
 
 	// Read first 512 bytes of header
 	headerBytes := make([]byte, 512)
