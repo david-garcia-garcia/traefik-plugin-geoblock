@@ -254,6 +254,26 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 
 		testRequest(t, "Default allow false", cfg, "8.8.4.4", http.StatusForbidden)
 	})
+
+	t.Run("IPWhitelist", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:              true,
+			DatabaseFilePath:     dbFilePath,
+			AllowedIPBlocks:      []string{"203.0.113.0/24", "198.51.100.1/32"}, // Using TEST-NET-3 and TEST-NET-2 ranges
+			DefaultAllow:         false,
+			DisallowedStatusCode: http.StatusForbidden,
+		}
+
+		testRequest(t, "Whitelisted subnet allowed", cfg, "203.0.113.100", http.StatusTeapot)
+		testRequest(t, "Whitelisted specific IP allowed", cfg, "198.51.100.1", http.StatusTeapot)
+		testRequest(t, "Non-whitelisted IP blocked", cfg, "203.0.114.1", http.StatusForbidden)
+
+		// Test interaction with country rules
+		cfg.AllowedCountries = []string{"US"}
+		testRequest(t, "Whitelisted IP allowed despite country rules", cfg, "203.0.113.100", http.StatusTeapot)
+		testRequest(t, "US IP allowed when in allowed countries", cfg, "8.8.8.8", http.StatusTeapot)
+		testRequest(t, "Non-US IP blocked when not in whitelist", cfg, "1.1.1.1", http.StatusForbidden)
+	})
 }
 
 func testRequest(t *testing.T, testName string, cfg *Config, ip string, expectedStatus int) {

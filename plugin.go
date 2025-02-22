@@ -165,7 +165,6 @@ func searchFile(baseFile string, defaultFile string) string {
 
 	// Return early if baseFile is empty
 	if baseFile == "" {
-		log.Printf("[ERR] baseFile path cannot be empty")
 		return defaultFile
 	}
 
@@ -408,7 +407,8 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) 
 		return false, ip, fmt.Errorf("unable to parse IP address from [%s]", ip)
 	}
 
-	// Check if IP is private before proceeding with other checks
+	// We want this check first because it's fast, even if it makes more sense to have
+	// it after the ip whitelist/blacklist verification
 	if ipAddr.IsPrivate() {
 		return p.allowPrivate, PrivateIpCountryAlias, nil
 	}
