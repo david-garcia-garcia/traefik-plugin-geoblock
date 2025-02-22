@@ -128,7 +128,7 @@ func createLogger(name, level, format, path string) *slog.Logger {
 		format = "text" // normalize format name
 	}
 
-	fmt.Printf("[INFO] Logging to %s with format %s at level %s\n", destination, format, level)
+	log.Printf("[INFO] Logging to %s with format %s at level %s\n", destination, format, level)
 
 	return slog.New(handler).With("plugin", name)
 }
@@ -139,7 +139,7 @@ type traefikLogWriter struct{}
 func (w *traefikLogWriter) Write(p []byte) (n int, err error) {
 	// https://github.com/traefik/traefik/issues/8204
 	// Since v2.5.5, fmt.Println()/fmt.Printf() are catched and transfered to the Traefik logs, it's not perfect but we will improve that.
-	fmt.Print(string(p))
+	fmt.Println(string(p))
 	return len(p), nil
 }
 
