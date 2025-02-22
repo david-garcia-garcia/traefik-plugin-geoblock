@@ -139,6 +139,31 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		}
 	})
 
+	t.Run("AllowedPrivate172Range", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:              true,
+			DatabaseFilePath:     dbFilePath,
+			AllowedCountries:     []string{},
+			AllowPrivate:         true,
+			DisallowedStatusCode: http.StatusOK,
+		}
+
+		plugin, err := New(context.TODO(), &noopHandler{}, cfg, pluginName)
+		if err != nil {
+			t.Errorf("expected no error, but got: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/foobar", nil)
+		req.Header.Set("X-Real-IP", "172.19.0.1")
+
+		rr := httptest.NewRecorder()
+		plugin.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusTeapot {
+			t.Errorf("expected status code %d, but got: %d", http.StatusTeapot, rr.Code)
+		}
+	})
+
 	t.Run("Disallowed", func(t *testing.T) {
 		cfg := &Config{
 			Enabled:              true,

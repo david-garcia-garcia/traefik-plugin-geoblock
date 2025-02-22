@@ -1,11 +1,9 @@
 package traefik_plugin_geoblock
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net"
@@ -50,6 +48,7 @@ func CreateConfig() *Config {
 	}
 }
 
+// Update the Plugin struct to store the ban HTML content instead of template
 type Plugin struct {
 	next                 http.Handler
 	name                 string
@@ -63,14 +62,8 @@ type Plugin struct {
 	banHtmlFilePath      string
 	allowedIPBlocks      []*net.IPNet
 	blockedIPBlocks      []*net.IPNet
-	banHtmlTemplate      *template.Template
+	banHtmlContent       string // Changed from banHtmlTemplate
 	logger               *slog.Logger
-}
-
-// Add this struct to hold template data
-type BanTemplateData struct {
-	Country string
-	IP      string
 }
 
 // Replace bufferedCloseWriter with simpleFileWriter
@@ -194,13 +187,13 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		return nil, fmt.Errorf("%s: failed loading allowed CIDR blocks: %w", name, err)
 	}
 
-	var banHtmlTemplate *template.Template
+	var banHtmlContent string
 	if cfg.BanHtmlFilePath != "" {
-		tmpl, err := template.ParseFiles(cfg.BanHtmlFilePath)
+		content, err := os.ReadFile(cfg.BanHtmlFilePath)
 		if err != nil {
-			log.Printf("%s: warning - could not load ban HTML template %s: %v", name, cfg.BanHtmlFilePath, err)
+			log.Printf("%s: warning - could not load ban HTML file %s: %v", name, cfg.BanHtmlFilePath, err)
 		} else {
-			banHtmlTemplate = tmpl
+			banHtmlContent = string(content)
 		}
 	}
 
@@ -217,7 +210,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		banHtmlFilePath:      cfg.BanHtmlFilePath,
 		allowedIPBlocks:      allowedIPBlocks,
 		blockedIPBlocks:      blockedIPBlocks,
-		banHtmlTemplate:      banHtmlTemplate,
+		banHtmlContent:       banHtmlContent,
 		logger:               logger,
 	}, nil
 }
@@ -450,29 +443,22 @@ func (p Plugin) isInIPBlocks(ip string, ipBlocks []*net.IPNet) (bool, int, error
 	return false, 0, nil
 }
 
-// Update the serveBanHtml function to use the template
+// Update the serveBanHtml function to use simple string replacement
 func (p Plugin) serveBanHtml(rw http.ResponseWriter, ip, country string) {
-	if p.banHtmlTemplate != nil {
+	if p.banHtmlContent != "" {
 		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rw.WriteHeader(p.disallowedStatusCode)
 
 		if country == EmptyCountry || country == "" {
 			country = "Unknown"
 		}
-		data := BanTemplateData{
-			Country: country,
-			IP:      ip,
-		}
 
-		var buf bytes.Buffer
-		if err := p.banHtmlTemplate.Execute(&buf, data); err != nil {
-			p.logger.Error("failed to execute ban template",
-				"error", err)
-			rw.WriteHeader(p.disallowedStatusCode)
-			return
-		}
+		// Simple string replacements
+		content := p.banHtmlContent
+		content = strings.ReplaceAll(content, "{{.Country}}", country)
+		content = strings.ReplaceAll(content, "{{.IP}}", ip)
 
-		_, _ = rw.Write(buf.Bytes())
+		_, _ = rw.Write([]byte(content))
 		return
 	}
 	rw.WriteHeader(p.disallowedStatusCode)
