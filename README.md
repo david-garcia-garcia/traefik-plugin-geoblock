@@ -67,4 +67,12 @@ http:
           logLevel: "info"
           # Log format (default: "text"). Options: "json", "text"
           logFormat: "json"
+          # Log destination (default: "stderr"). Options:
+          #   - "stdout": Write logs to standard output
+          #   - "stderr": Write logs to standard error
+          #   - "/dev/stdout": Write logs to standard output (Unix-style path)
+          #   - "/dev/stderr": Write logs to standard error (Unix-style path)
+          #   - "/dev/null": Discard all logs
+          #   - "/path/to/file.log": Write logs to specified file path
+          logPath: "/dev/stderr"
 ```

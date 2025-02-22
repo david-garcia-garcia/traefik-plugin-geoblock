@@ -96,14 +96,20 @@ func createLogger(name, level, format, path string) *slog.Logger {
 		}
 	}
 
-	opts := &slog.HandlerOptions{Level: logLevel}
+	opts := &slog.HandlerOptions{
+		Level: logLevel,
+	}
+
+	log.Printf("[ERROR] PATH PATH: %v", path)
 
 	var writer io.Writer
 	switch strings.ToLower(path) {
-	case "", "stderr":
+	case "", "stderr", "/dev/stderr":
 		writer = os.Stderr
-	case "stdout":
+	case "stdout", "/dev/stdout":
 		writer = os.Stdout
+	case "/dev/null", "null", "none", "off":
+		writer = io.Discard
 	default:
 		// Create buffered writer with 1KB buffer size and 2 second flush timeout
 		// We cannot use SYSCALL to flush the buffer or rotate as traefik does,
@@ -176,10 +182,9 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 	// Check database version
 	version, err := GetDatabaseVersion(cfg.DatabaseFilePath)
 	if err != nil {
-		logger.Warn("failed to read database version", "error", err)
-	} else {
-		logger.Info("database version", "version", version.String())
+		return nil, fmt.Errorf("%s: failed to read database version: %w", name, err)
 	}
+	logger.Info("ip2location database version: " + version.String())
 
 	allowedIPBlocks, err := initIPBlocks(cfg.AllowedIPBlocks)
 	if err != nil {
@@ -227,11 +232,18 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	for _, ip := range p.GetRemoteIPs(req) {
+	remoteIPs := p.GetRemoteIPs(req)
+
+	for _, ip := range remoteIPs {
 		allowed, country, err := p.CheckAllowed(ip)
 		if err != nil {
+			var ipChain string = ""
+			if len(remoteIPs) > 1 {
+				ipChain = strings.Join(remoteIPs, ", ")
+			}
 			p.logger.Error("request check failed",
 				"ip", ip,
+				"ip_chain", ipChain,
 				"host", req.Host,
 				"method", req.Method,
 				"path", req.URL.Path,
@@ -240,8 +252,13 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			return
 		}
 		if !allowed {
+			var ipChain string = ""
+			if len(remoteIPs) > 1 {
+				ipChain = strings.Join(remoteIPs, ", ")
+			}
 			p.logger.Info("blocked request",
 				"ip", ip,
+				"ip_chain", ipChain,
 				"country", country,
 				"host", req.Host,
 				"method", req.Method,
