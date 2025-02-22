@@ -72,12 +72,8 @@ http:
           logLevel: "info"
           # Log format (default: "text"). Options: "json", "text"
           logFormat: "json"
-          # Log destination (default: "stderr"). Options:
-          #   - "stdout": Write logs to standard output
-          #   - "stderr": Write logs to standard error
-          #   - "/dev/stdout": Write logs to standard output (Unix-style path)
-          #   - "/dev/stderr": Write logs to standard error (Unix-style path)
-          #   - "/dev/null": Discard all logs
-          #   - "/path/to/file.log": Write logs to specified file path
-          logPath: "/dev/stderr"
+          # Log destination (default: ""). Options:
+          #   - "": Write using fmt.Println() which is catched by Traefik and transfered to the Traefik logs see https://github.com/traefik/traefik/issues/8204
+          #   - "/path/to/file.log": Write logs to specified file path. If you use /dev/stderr or /dev/stdout, it will write to the standard error or standard output but it will NOT be catched by Traefik and transfered to the Traefik logs see https://github.com/traefik/traefik/issues/8204 
+          logPath: ""
 ```

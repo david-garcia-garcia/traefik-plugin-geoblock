@@ -96,7 +96,7 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	default:
 		logLevel = slog.LevelInfo
 		if level != "" {
-			log.Printf("[WARN] Unknown log level '%s', defaulting to 'info'", level)
+			fmt.Printf("[WARN] Unknown log level '%s', defaulting to 'info'\n", level)
 		}
 	}
 
@@ -104,24 +104,16 @@ func createLogger(name, level, format, path string) *slog.Logger {
 		Level: logLevel,
 	}
 
-	var writer io.Writer
-	var destination string
-	switch strings.ToLower(path) {
-	case "", "stderr", "/dev/stderr":
-		writer = os.Stderr
-		destination = "stderr"
-	case "stdout", "/dev/stdout":
-		writer = os.Stdout
-		destination = "stdout"
-	case "/dev/null", "null", "none", "off":
-		writer = io.Discard
-		destination = "null"
-	default:
+	// Create a custom writer that uses fmt.Printf
+	fmtWriter := &traefikLogWriter{}
+	var writer io.Writer = fmtWriter
+	var destination string = "traefik"
+
+	// Only attempt file writing if explicitly specified
+	if path != "" {
 		bw, err := newBufferedFileWriter(path, 1024, 2*time.Second)
 		if err != nil {
-			log.Printf("[ERROR] Failed to create buffered file writer: %v", err)
-			writer = os.Stderr
-			destination = "stderr"
+			fmt.Printf("[ERROR] Failed to create buffered file writer: %v\n", err)
 		} else {
 			writer = bw
 			destination = path
@@ -136,9 +128,19 @@ func createLogger(name, level, format, path string) *slog.Logger {
 		format = "text" // normalize format name
 	}
 
-	log.Printf("[INFO] Logging to %s with format %s", destination, format)
+	fmt.Printf("[INFO] Logging to %s with format %s at level %s\n", destination, format, level)
 
 	return slog.New(handler).With("plugin", name)
+}
+
+// traefikLogWriter implements io.Writer and uses fmt.Printf for output
+type traefikLogWriter struct{}
+
+func (w *traefikLogWriter) Write(p []byte) (n int, err error) {
+	// https://github.com/traefik/traefik/issues/8204
+	// Since v2.5.5, fmt.Println()/fmt.Printf() are catched and transfered to the Traefik logs, it's not perfect but we will improve that.
+	fmt.Print(string(p))
+	return len(p), nil
 }
 
 func fileExists(filename string) bool {
