@@ -104,7 +104,7 @@ http:
           # Can be:
           # - Full path: /path/to/IP2LOCATION-LITE-DB1.IPV6.BIN
           # - Directory: /path/to/ (will search for IP2LOCATION-LITE-DB1.IPV6.BIN)
-          # - Empty: uses embedded database (not recommended for production)
+          # - Empty: uses embedded database (not recommended for production) assuming it is installed in /plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/
           
           #-------------------------------
           # Country-based Rules (ISO 3166-1 alpha-2 format)
@@ -140,7 +140,7 @@ http:
           # Error Handling and ban
           #-------------------------------
           banIfError: true                # Block requests if IP lookup fails
-          disallowedStatusCode: 403       # HTTP status code for blocked requests
+          disallowedStatusCode: 403       # HTTP status code for blocked requests. If you are using banHtmlFilePath make sure to set this to a valid code (such as NOT 204).
           
           banHtmlFilePath: "/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/geoblockban.html"
           # Can be:

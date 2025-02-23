@@ -92,7 +92,7 @@ type Plugin struct {
 	bypassHeaders        map[string]string
 }
 
-func createBootstrapLogger() *slog.Logger {
+func createBootstrapLogger(name string) *slog.Logger {
 	var logLevel slog.Level = slog.LevelDebug
 
 	opts := &slog.HandlerOptions{
@@ -103,7 +103,7 @@ func createBootstrapLogger() *slog.Logger {
 	fmtWriter := &traefikLogWriter{}
 	var writer io.Writer = fmtWriter
 	handler := slog.NewTextHandler(writer, opts)
-	return slog.New(handler).With("plugin", "bootstrap")
+	return slog.New(handler).With("plugin", "name")
 }
 
 // Update createLogger to use simpleFileWriter
@@ -230,7 +230,7 @@ func searchFile(baseFile string, defaultFile string, logger *slog.Logger) string
 // New creates a new plugin instance.
 func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.Handler, error) {
 
-	bootstrapLogger := createBootstrapLogger()
+	bootstrapLogger := createBootstrapLogger(name)
 
 	if next == nil {
 		return nil, fmt.Errorf("%s: no next handler provided", name)
@@ -306,13 +306,11 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 
 	var banHtmlContent string
 
-	cfg.BanHtmlFilePath = searchFile(cfg.BanHtmlFilePath, "geoblockban.html", bootstrapLogger)
-
 	if cfg.BanHtmlFilePath != "" {
-
+		cfg.BanHtmlFilePath = searchFile(cfg.BanHtmlFilePath, "geoblockban.html", bootstrapLogger)
 		content, err := os.ReadFile(cfg.BanHtmlFilePath)
 		if err != nil {
-			log.Printf("%s: warning - could not load ban HTML file %s: %v", name, cfg.BanHtmlFilePath, err)
+			return nil, fmt.Errorf("%s: failed to load ban HTML file %s: %w", name, cfg.BanHtmlFilePath, err)
 		} else {
 			banHtmlContent = string(content)
 		}
