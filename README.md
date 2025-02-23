@@ -161,6 +161,7 @@ http:
           #-------------------------------
           databaseAutoUpdate: true                   
           # Enable automatic database updates. Updates are asynchronous and triggere during middleware startup. The updated database will be used when the middleware starts again.
+          # Make sure you whitelist in your FW domains ["download.ip2location.com", "www.ip2location.com"]
           databaseAutoUpdateDir: "/data/ip2database" 
           # Directory to store updated databases. This must be a persitent volme in the traefik pod.
           databaseAutoUpdateToken: ""                # IP2Location download token (if using premium)
