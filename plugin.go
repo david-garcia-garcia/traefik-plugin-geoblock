@@ -45,9 +45,10 @@ type Config struct {
 	BanHtmlFilePath      string // Custom HTML template for blocked requests
 
 	// Logging configuration
-	LogLevel  string // Log level: "debug", "info", "warn", "error"
-	LogFormat string // Log format: "json" or "text"
-	LogPath   string // Log destination: "stdout", "stderr", or file path
+	LogLevel          string // Log level: "debug", "info", "warn", "error"
+	LogFormat         string // Log format: "json" or "text"
+	LogPath           string // Log destination: "stdout", "stderr", or file path
+	LogBannedRequests bool   // Log blocked requests
 
 	// BypassHeaders is a map of header names to values that, when matched,
 	// will skip the geoblocking check entirely
@@ -70,6 +71,7 @@ func CreateConfig() *Config {
 		BanIfError:             true,                    // Default to banning on errors
 		BypassHeaders:          make(map[string]string), // Initialize empty map
 		DatabaseAutoUpdateCode: "DB1",                   // Default database code
+		LogBannedRequests:      true,                    // Default to logging blocked requests
 	}
 }
 
@@ -90,6 +92,7 @@ type Plugin struct {
 	banHtmlContent       string // Changed from banHtmlTemplate
 	logger               *slog.Logger
 	bypassHeaders        map[string]string
+	logBannedRequests    bool
 }
 
 func createBootstrapLogger(name string) *slog.Logger {
@@ -103,7 +106,7 @@ func createBootstrapLogger(name string) *slog.Logger {
 	fmtWriter := &traefikLogWriter{}
 	var writer io.Writer = fmtWriter
 	handler := slog.NewTextHandler(writer, opts)
-	return slog.New(handler).With("plugin", "name")
+	return slog.New(handler).With("plugin", name)
 }
 
 // Update createLogger to use simpleFileWriter
@@ -155,7 +158,7 @@ func createLogger(name, level, format, path string, bootstrapLogger *slog.Logger
 	}
 
 	// This log here so that in the traefik logs we see where are the logs actually going to for the middleware
-	bootstrapLogger.Info(fmt.Sprintf("Logging to %s with %s format at %s level", destination, format, logLevel))
+	bootstrapLogger.Debug(fmt.Sprintf("Logging to %s with %s format at %s level", destination, format, logLevel))
 	return slog.New(handler).With("plugin", name)
 }
 
@@ -228,8 +231,7 @@ func searchFile(baseFile string, defaultFile string, logger *slog.Logger) string
 }
 
 // New creates a new plugin instance.
-func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.Handler, error) {
-
+func New(ctx context.Context, next http.Handler, cfg *Config, name string) (http.Handler, error) {
 	bootstrapLogger := createBootstrapLogger(name)
 
 	if next == nil {
@@ -292,7 +294,14 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to read database version: %w", name, err)
 	}
-	logger.Info("using ip2location database version: " + version.String() + " from " + cfg.DatabaseFilePath)
+	logger.Debug("using ip2location database version: " + version.String() + " from " + cfg.DatabaseFilePath)
+
+	// Check if database is older than 2 months
+	if time.Since(version.Date()) > 60*24*time.Hour {
+		bootstrapLogger.Warn("ip2location database is more than 2 months old",
+			"version", version.String(),
+			"age", time.Since(version.Date()).Round(24*time.Hour))
+	}
 
 	allowedIPBlocks, err := initIPBlocks(cfg.AllowedIPBlocks)
 	if err != nil {
@@ -327,7 +336,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		blockedCountries[c] = struct{}{}
 	}
 
-	return &Plugin{
+	plugin := &Plugin{
 		next:                 next,
 		name:                 name,
 		db:                   db,
@@ -343,7 +352,10 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		banHtmlContent:       banHtmlContent,
 		bypassHeaders:        cfg.BypassHeaders,
 		logger:               logger,
-	}, nil
+		logBannedRequests:    cfg.LogBannedRequests,
+	}
+
+	return plugin, nil
 }
 
 // ServeHTTP implements the http.Handler interface.
@@ -398,13 +410,15 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			if len(remoteIPs) > 1 {
 				ipChain = strings.Join(remoteIPs, ", ")
 			}
-			p.logger.Info("blocked request",
-				"ip", ip,
-				"ip_chain", ipChain,
-				"country", country,
-				"host", req.Host,
-				"method", req.Method,
-				"path", req.URL.Path)
+			if p.logBannedRequests {
+				p.logger.Info("blocked request",
+					"ip", ip,
+					"ip_chain", ipChain,
+					"country", country,
+					"host", req.Host,
+					"method", req.Method,
+					"path", req.URL.Path)
+			}
 			p.serveBanHtml(rw, ip, country)
 			return
 		}
@@ -588,7 +602,9 @@ func (p Plugin) serveBanHtml(rw http.ResponseWriter, ip, country string) {
 		content = strings.ReplaceAll(content, "{{.Country}}", country)
 		content = strings.ReplaceAll(content, "{{.IP}}", ip)
 
-		_, _ = rw.Write([]byte(content))
+		if _, err := rw.Write([]byte(content)); err != nil {
+			p.logger.Warn("failed to write ban HTML response", "error", err)
+		}
 		return
 	}
 	rw.WriteHeader(p.disallowedStatusCode)

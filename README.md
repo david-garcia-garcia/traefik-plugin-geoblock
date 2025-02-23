@@ -1,4 +1,4 @@
-# traefik-plugin-geoblock
+# 🛡️ traefik-plugin-geoblock
 
 [![Build Status](https://github.com/nscuro/traefik-plugin-geoblock/actions/workflows/ci.yml/badge.svg)](https://github.com/nscuro/traefik-plugin-geoblock/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/nscuro/traefik-plugin-geoblock)](https://goreportcard.com/report/github.com/nscuro/traefik-plugin-geoblock)
@@ -7,9 +7,9 @@
 
 A Traefik plugin that allows or blocks requests based on IP geolocation using IP2Location database.
 
-> This project includes IP2Location LITE data available from [`lite.ip2location.com`](https://lite.ip2location.com/database/ip-country).
+> 🌍 This project includes IP2Location LITE data available from [`lite.ip2location.com`](https://lite.ip2location.com/database/ip-country).
 
-## Features
+## ✨ Features
 
 - Block or allow requests based on country of origin (using ISO 3166-1 alpha-2 country codes)
 - Whitelist specific IP ranges (CIDR notation)
@@ -18,8 +18,9 @@ A Traefik plugin that allows or blocks requests based on IP geolocation using IP
 - Configurable handling of private/internal networks
 - Customizable error responses
 - Flexible logging options
+- Automatic database updates
 
-## Installation
+## 📥 Installation
 
 It is possible to install the [plugin locally](https://traefik.io/blog/using-private-plugins-in-traefik-proxy-2-5/) or to install it through [Traefik Plugins]([Plugins](https://plugins.traefik.io/plugins)).
 
@@ -56,7 +57,7 @@ experimental:
       version: v0.5.0
 ```
 
-## Configuration
+## ⚙️ Configuration
 
 ### Example Docker Compose Setup
 
@@ -155,6 +156,7 @@ http:
           logLevel: "info"                  # Available: debug, info, warn, error
           logFormat: "json"                 # Available: json, text
           logPath: "/var/log/geoblock.log"  # Empty for Traefik's standard output
+          logBannedRequests: true           # Log blocked requests. They will be logged at info level.
 
           #-------------------------------
           # Database Auto-Update Settings
@@ -169,7 +171,7 @@ http:
 
 ```
 
-### Processing Order
+### 🔄 Processing Order
 
 The plugin processes requests in the following order:
 
@@ -185,4 +187,6 @@ The plugin processes requests in the following order:
 
 If any IP in the chain is blocked, the request is denied.
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+---
+
+📄 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
