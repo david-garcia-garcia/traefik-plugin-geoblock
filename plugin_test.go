@@ -276,6 +276,84 @@ func TestPlugin_ServeHTTP(t *testing.T) {
 		testRequest(t, "US IP allowed when in allowed countries", cfg, "8.8.8.8", http.StatusTeapot)
 		testRequest(t, "Non-US IP blocked when not in whitelist", cfg, "1.1.1.1", http.StatusForbidden)
 	})
+
+	t.Run("BypassHeaders", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:              true,
+			DatabaseFilePath:     dbFilePath,
+			BlockedCountries:     []string{"US"},
+			DisallowedStatusCode: http.StatusForbidden,
+			BypassHeaders: map[string]string{
+				"X-Bypass-Key": "secret123",
+				"Auth-Token":   "bypass-token",
+			},
+		}
+
+		tests := []struct {
+			name         string
+			headers      map[string]string
+			expectedCode int
+			description  string
+		}{
+			{
+				name: "bypass with correct X-Bypass-Key",
+				headers: map[string]string{
+					"X-Real-IP":    "8.8.8.8", // US IP that would normally be blocked
+					"X-Bypass-Key": "secret123",
+				},
+				expectedCode: http.StatusTeapot,
+				description:  "should allow access with correct bypass header",
+			},
+			{
+				name: "bypass with correct Auth-Token",
+				headers: map[string]string{
+					"X-Real-IP":  "8.8.8.8",
+					"Auth-Token": "bypass-token",
+				},
+				expectedCode: http.StatusTeapot,
+				description:  "should allow access with correct auth token",
+			},
+			{
+				name: "no bypass with incorrect header value",
+				headers: map[string]string{
+					"X-Real-IP":    "8.8.8.8",
+					"X-Bypass-Key": "wrong-secret",
+				},
+				expectedCode: http.StatusForbidden,
+				description:  "should block access with incorrect bypass header",
+			},
+			{
+				name: "no bypass without headers",
+				headers: map[string]string{
+					"X-Real-IP": "8.8.8.8",
+				},
+				expectedCode: http.StatusForbidden,
+				description:  "should block access without bypass headers",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				plugin, err := New(context.TODO(), &noopHandler{}, cfg, pluginName)
+				if err != nil {
+					t.Fatalf("expected no error, but got: %v", err)
+				}
+
+				req := httptest.NewRequest(http.MethodGet, "/foobar", nil)
+				for key, value := range tt.headers {
+					req.Header.Set(key, value)
+				}
+
+				rr := httptest.NewRecorder()
+				plugin.ServeHTTP(rr, req)
+
+				if rr.Code != tt.expectedCode {
+					t.Errorf("%s: expected status code %d, but got: %d",
+						tt.description, tt.expectedCode, rr.Code)
+				}
+			})
+		}
+	})
 }
 
 func testRequest(t *testing.T, testName string, cfg *Config, ip string, expectedStatus int) {

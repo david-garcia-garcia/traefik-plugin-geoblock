@@ -50,7 +50,7 @@ http:
           # Path to ip2location database file
           # Can be either:
           #   - Direct path to the database file
-          #   - Directory path that will be recursively searched for IP2LOCATION-LITE-DB1.IPV6.BIN (use /plugins-storage/sources if you have traefik pull the plugin from github)
+          #   - Directory path that will be recursively searched for IP2LOCATION-LITE-DB1.IPV6.BIN (use /plugins-storage/sources if you have traefik pull the plugin from github).
           databaseFilePath: /plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN
           # Whitelist of countries to allow (ISO 3166-1 alpha-2)
           allowedCountries: [ "AT", "CH", "DE" ]
@@ -73,7 +73,11 @@ http:
           # Log format (default: "text"). Options: "json", "text"
           logFormat: "json"
           # Log destination (default: ""). Options:
-          #   - "": Write using fmt.Println() which is catched by Traefik and transfered to the Traefik logs see https://github.com/traefik/traefik/issues/8204
-          #   - "/path/to/file.log": Write logs to specified file path. If you use /dev/stderr or /dev/stdout, it will write to the standard error or standard output but it will NOT be catched by Traefik and transfered to the Traefik logs see https://github.com/traefik/traefik/issues/8204 
+          #   - "": Write using log.Println() which is catched by Traefik and transfered to the Traefik logs see https://github.com/traefik/traefik/issues/8204
+          #   - "/path/to/file.log": Write logs to specified file path. If you use /dev/stderr or /dev/stdout, it will write to the standard error or standard output but it will NOT be catched by Traefik and transfered to the Traefik logs
           logPath: ""
+          # Map of headers and their expected values that, when matched, will bypass the geoblocking check.
+          bypassHeaders:
+            X-Internal-Request: "true"
+            X-Skip-Geoblock: "1"
 ```

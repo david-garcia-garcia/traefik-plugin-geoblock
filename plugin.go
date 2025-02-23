@@ -21,7 +21,7 @@ import (
 //go:generate go run ./tools/dbdownload/main.go -o ./IP2LOCATION-LITE-DB1.IPV6.BIN
 
 // Add this constant near the top of the file, after imports
-const PrivateIpCountryAlias = "PRIV"
+const PrivateIpCountryAlias = "PRIVATE"
 
 // Config defines the plugin configuration.
 type Config struct {
@@ -48,16 +48,21 @@ type Config struct {
 	LogLevel  string // Log level: "debug", "info", "warn", "error"
 	LogFormat string // Log format: "json" or "text"
 	LogPath   string // Log destination: "stdout", "stderr", or file path
+
+	// BypassHeaders is a map of header names to values that, when matched,
+	// will skip the geoblocking check entirely
+	BypassHeaders map[string]string
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
 		DisallowedStatusCode: http.StatusForbidden,
-		LogLevel:             "info",   // Default to info logging
-		LogFormat:            "text",   // Default to text format
-		LogPath:              "stdout", // Default to stderr
-		BanIfError:           true,     // Default to banning on errors
+		LogLevel:             "info",                  // Default to info logging
+		LogFormat:            "text",                  // Default to text format
+		LogPath:              "",                      // Default to traefik
+		BanIfError:           true,                    // Default to banning on errors
+		BypassHeaders:        make(map[string]string), // Initialize empty map
 	}
 }
 
@@ -77,10 +82,25 @@ type Plugin struct {
 	blockedIPBlocks      []*net.IPNet
 	banHtmlContent       string // Changed from banHtmlTemplate
 	logger               *slog.Logger
+	bypassHeaders        map[string]string
+}
+
+func createBootstrapLogger() *slog.Logger {
+	var logLevel slog.Level = slog.LevelDebug
+
+	opts := &slog.HandlerOptions{
+		Level: logLevel,
+	}
+
+	// Create a custom writer that uses fmt.Printf
+	fmtWriter := &traefikLogWriter{}
+	var writer io.Writer = fmtWriter
+	handler := slog.NewTextHandler(writer, opts)
+	return slog.New(handler).With("plugin", "bootstrap")
 }
 
 // Update createLogger to use simpleFileWriter
-func createLogger(name, level, format, path string) *slog.Logger {
+func createLogger(name, level, format, path string, logger *slog.Logger) *slog.Logger {
 	var logLevel slog.Level
 	level = strings.ToLower(level) // Convert level to lowercase
 	switch level {
@@ -95,7 +115,7 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	default:
 		logLevel = slog.LevelInfo
 		if level != "" {
-			log.Printf("[WARN] Unknown log level '%s', defaulting to 'info'\n", level)
+			logger.Warn("Unknown log level", "level", level)
 		}
 	}
 
@@ -112,7 +132,7 @@ func createLogger(name, level, format, path string) *slog.Logger {
 	if path != "" {
 		bw, err := newBufferedFileWriter(path, 1024, 2*time.Second)
 		if err != nil {
-			log.Printf("[ERROR] Failed to create buffered file writer: %v\n", err)
+			logger.Error("Failed to create buffered file writer for path '%s': %v\n", path, err)
 		} else {
 			writer = bw
 			destination = path
@@ -127,8 +147,7 @@ func createLogger(name, level, format, path string) *slog.Logger {
 		format = "text" // normalize format name
 	}
 
-	log.Printf("[INFO] Logging to %s with format %s at level %s\n", destination, format, level)
-	slog.Debug("logging to", "destination", destination, "format", format, "level", level)
+	logger.Info("Logging to", "destination", destination, "format", format, "level", level)
 	return slog.New(handler).With("plugin", name)
 }
 
@@ -163,7 +182,7 @@ func fileExists(filename string) bool {
 //
 // The function will log errors if the file cannot be found or if there are issues during the search,
 // but will not fail - it always returns a path.
-func searchFile(baseFile string, defaultFile string) string {
+func searchFile(baseFile string, defaultFile string, logger *slog.Logger) string {
 
 	// Return early if baseFile is empty
 	if baseFile == "" {
@@ -190,11 +209,11 @@ func searchFile(baseFile string, defaultFile string) string {
 
 	if err != nil {
 		// Log error but continue with original path
-		log.Printf("[ERR] Error searching for file: %v", err)
+		logger.Error("error searching for file", "error", err)
 	}
 
 	if !fileExists(baseFile) {
-		log.Printf("[ERR] Could not find file %s in %v", defaultFile, baseFile)
+		logger.Error("could not find file", "file", defaultFile, "path", baseFile)
 	}
 
 	return baseFile // Return found path or original path if not found
@@ -202,6 +221,16 @@ func searchFile(baseFile string, defaultFile string) string {
 
 // New creates a new plugin instance.
 func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.Handler, error) {
+
+	bootstrapLogger := createBootstrapLogger()
+
+	// Log executable path for debugging
+	if executable, err := os.Executable(); err != nil {
+		bootstrapLogger.Error("failed to get executable path", "error", err)
+	} else {
+		bootstrapLogger.Debug("executable path", "path", executable)
+	}
+
 	if next == nil {
 		return nil, fmt.Errorf("%s: no next handler provided", name)
 	}
@@ -211,14 +240,14 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 	}
 
 	// Create logger first so we can use it for debugging
-	logger := createLogger(name, cfg.LogLevel, cfg.LogFormat, cfg.LogPath)
+	logger := createLogger(name, cfg.LogLevel, cfg.LogFormat, cfg.LogPath, bootstrapLogger)
 	logger.Debug("initializing plugin",
 		"logLevel", cfg.LogLevel,
 		"logFormat", cfg.LogFormat,
 		"logPath", cfg.LogPath)
 
 	if !cfg.Enabled {
-		logger.Warn("plugin disabled")
+		bootstrapLogger.Warn("plugin disabled")
 		return &Plugin{
 			next:    next,
 			name:    name,
@@ -234,7 +263,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 
 	// Search for database file in plugin directories if path is provided
 	if cfg.DatabaseFilePath != "" {
-		cfg.DatabaseFilePath = searchFile(cfg.DatabaseFilePath, "IP2LOCATION-LITE-DB1.IPV6.BIN")
+		cfg.DatabaseFilePath = searchFile(cfg.DatabaseFilePath, "IP2LOCATION-LITE-DB1.IPV6.BIN", bootstrapLogger)
 	}
 
 	db, err := ip2location.OpenDB(cfg.DatabaseFilePath)
@@ -261,8 +290,10 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 
 	var banHtmlContent string
 
+	cfg.BanHtmlFilePath = searchFile(cfg.BanHtmlFilePath, "geoblockban.html", bootstrapLogger)
+
 	if cfg.BanHtmlFilePath != "" {
-		cfg.BanHtmlFilePath = searchFile(cfg.BanHtmlFilePath, "geoblockban.html")
+
 		content, err := os.ReadFile(cfg.BanHtmlFilePath)
 		if err != nil {
 			log.Printf("%s: warning - could not load ban HTML file %s: %v", name, cfg.BanHtmlFilePath, err)
@@ -296,6 +327,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		allowedIPBlocks:      allowedIPBlocks,
 		blockedIPBlocks:      blockedIPBlocks,
 		banHtmlContent:       banHtmlContent,
+		bypassHeaders:        cfg.BypassHeaders,
 		logger:               logger,
 	}, nil
 }
@@ -306,6 +338,21 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		p.logger.Debug("plugin disabled, passing request through")
 		p.next.ServeHTTP(rw, req)
 		return
+	}
+
+	// Check for bypass headers
+	// Optimize by avoiding multiple map lookups and method calls
+	for header, expectedValue := range p.bypassHeaders {
+		if actualValue := req.Header.Get(header); actualValue == expectedValue {
+			p.logger.Debug("bypassing geoblock due to bypass header match",
+				"header", header,
+				"value", expectedValue,
+				"remote_addr", req.RemoteAddr,
+				"x_real_ip", req.Header.Get("x-real-ip"),
+				"x_forwarded_for", req.Header.Get("x-forwarded-for"))
+			p.next.ServeHTTP(rw, req)
+			return
+		}
 	}
 
 	remoteIPs := p.GetRemoteIPs(req)

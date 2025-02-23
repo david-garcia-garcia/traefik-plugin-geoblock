@@ -1,6 +1,6 @@
 services:
   traefik:
-    image: "traefik:v3.0.0"
+    image: "traefik:v3.1.7"
     container_name: "traefik"
     restart: unless-stopped
     command:
@@ -33,7 +33,7 @@ services:
       - "traefik.http.routers.router-foo.middlewares=geoblock2@docker"
       - "traefik.http.services.service-foo.loadbalancer.server.port=80"
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.enabled=true"
-      - "traefik.http.middlewares.geoblock2.plugin.geoblock.loglevel=INFO"
+      - "traefik.http.middlewares.geoblock2.plugin.geoblock.loglevel=DEBUG"
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.logpath="
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.logformat="
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.databaseFilePath=/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN"
@@ -51,7 +51,7 @@ services:
       - "traefik.http.routers.router-bar.middlewares=geoblock@docker"
       - "traefik.http.services.service-bar.loadbalancer.server.port=80"
       - "traefik.http.middlewares.geoblock.plugin.geoblock.enabled=true"
-      - "traefik.http.middlewares.geoblock.plugin.geoblock.loglevel=INFO"
+      - "traefik.http.middlewares.geoblock.plugin.geoblock.loglevel=DEBUG"
       - "traefik.http.middlewares.geoblock.plugin.geoblock.logpath="
       - "traefik.http.middlewares.geoblock.plugin.geoblock.logformat="
       - "traefik.http.middlewares.geoblock.plugin.geoblock.databaseFilePath=/plugins-local"
