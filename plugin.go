@@ -224,13 +224,6 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 
 	bootstrapLogger := createBootstrapLogger()
 
-	// Log executable path for debugging
-	if executable, err := os.Executable(); err != nil {
-		bootstrapLogger.Error("failed to get executable path", "error", err)
-	} else {
-		bootstrapLogger.Debug("executable path", "path", executable)
-	}
-
 	if next == nil {
 		return nil, fmt.Errorf("%s: no next handler provided", name)
 	}
