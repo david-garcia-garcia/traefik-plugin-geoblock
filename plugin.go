@@ -158,7 +158,9 @@ func createLogger(name, level, format, path string, bootstrapLogger *slog.Logger
 	}
 
 	// This log here so that in the traefik logs we see where are the logs actually going to for the middleware
-	bootstrapLogger.Debug(fmt.Sprintf("Logging to %s with %s format at %s level", destination, format, logLevel))
+	if logLevel <= slog.LevelDebug {
+		bootstrapLogger.Debug(fmt.Sprintf("Logging to %s with %s format at %s level", destination, format, logLevel))
+	}
 	return slog.New(handler).With("plugin", name)
 }
 
