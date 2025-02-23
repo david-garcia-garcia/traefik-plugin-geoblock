@@ -52,17 +52,24 @@ type Config struct {
 	// BypassHeaders is a map of header names to values that, when matched,
 	// will skip the geoblocking check entirely
 	BypassHeaders map[string]string
+
+	// Auto-update settings
+	DatabaseAutoUpdate      bool   `json:"databaseAutoUpdate,omitempty"`
+	DatabaseAutoUpdateDir   string `json:"databaseAutoUpdateDir,omitempty"`
+	DatabaseAutoUpdateToken string `json:"databaseAutoUpdateToken,omitempty"`
+	DatabaseAutoUpdateCode  string `json:"databaseAutoUpdateCode,omitempty"`
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		DisallowedStatusCode: http.StatusForbidden,
-		LogLevel:             "info",                  // Default to info logging
-		LogFormat:            "text",                  // Default to text format
-		LogPath:              "",                      // Default to traefik
-		BanIfError:           true,                    // Default to banning on errors
-		BypassHeaders:        make(map[string]string), // Initialize empty map
+		DisallowedStatusCode:   http.StatusForbidden,
+		LogLevel:               "info",                  // Default to info logging
+		LogFormat:              "text",                  // Default to text format
+		LogPath:                "",                      // Default to traefik
+		BanIfError:             true,                    // Default to banning on errors
+		BypassHeaders:          make(map[string]string), // Initialize empty map
+		DatabaseAutoUpdateCode: "DB1",                   // Default database code
 	}
 }
 
@@ -100,7 +107,7 @@ func createBootstrapLogger() *slog.Logger {
 }
 
 // Update createLogger to use simpleFileWriter
-func createLogger(name, level, format, path string, logger *slog.Logger) *slog.Logger {
+func createLogger(name, level, format, path string, bootstrapLogger *slog.Logger) *slog.Logger {
 	var logLevel slog.Level
 	level = strings.ToLower(level) // Convert level to lowercase
 	switch level {
@@ -115,7 +122,7 @@ func createLogger(name, level, format, path string, logger *slog.Logger) *slog.L
 	default:
 		logLevel = slog.LevelInfo
 		if level != "" {
-			logger.Warn("Unknown log level", "level", level)
+			bootstrapLogger.Warn("Unknown log level", "level", level)
 		}
 	}
 
@@ -132,7 +139,7 @@ func createLogger(name, level, format, path string, logger *slog.Logger) *slog.L
 	if path != "" {
 		bw, err := newBufferedFileWriter(path, 1024, 2*time.Second)
 		if err != nil {
-			logger.Error("Failed to create buffered file writer for path '%s': %v\n", path, err)
+			bootstrapLogger.Error("Failed to create buffered file writer for path '%s': %v\n", path, err)
 		} else {
 			writer = bw
 			destination = path
@@ -147,7 +154,8 @@ func createLogger(name, level, format, path string, logger *slog.Logger) *slog.L
 		format = "text" // normalize format name
 	}
 
-	logger.Info("Logging to", "destination", destination, "format", format, "level", level)
+	// This log here so that in the traefik logs we see where are the logs actually going to for the middleware
+	bootstrapLogger.Info(fmt.Sprintf("Logging to %s with %s format at %s level", destination, format, logLevel))
 	return slog.New(handler).With("plugin", name)
 }
 
@@ -254,9 +262,24 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		return nil, fmt.Errorf("%s: %d is not a valid http status code", name, cfg.DisallowedStatusCode)
 	}
 
-	// Search for database file in plugin directories if path is provided
+	// Search for database file in plugin directories if path is provided. Even if auto-update is enabled this
+	// might be a fallback location.
 	if cfg.DatabaseFilePath != "" {
 		cfg.DatabaseFilePath = searchFile(cfg.DatabaseFilePath, "IP2LOCATION-LITE-DB1.IPV6.BIN", bootstrapLogger)
+	}
+
+	// Handle auto-update configuration
+	if cfg.DatabaseAutoUpdate {
+		if cfg.DatabaseAutoUpdateDir == "" {
+			return nil, fmt.Errorf("database auto-update directory must be specified when auto-update is enabled")
+		}
+
+		// Try to find and use latest database
+		if latest, err := findLatestDatabase(cfg.DatabaseAutoUpdateDir, cfg.DatabaseAutoUpdateCode); err == nil && latest != "" {
+			cfg.DatabaseFilePath = latest
+		}
+
+		UpdateIfNeeded(cfg.DatabaseFilePath, false, logger, cfg)
 	}
 
 	db, err := ip2location.OpenDB(cfg.DatabaseFilePath)
@@ -269,7 +292,7 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 	if err != nil {
 		return nil, fmt.Errorf("%s: failed to read database version: %w", name, err)
 	}
-	logger.Info("ip2location database version: " + version.String())
+	logger.Info("using ip2location database version: " + version.String() + " from " + cfg.DatabaseFilePath)
 
 	allowedIPBlocks, err := initIPBlocks(cfg.AllowedIPBlocks)
 	if err != nil {

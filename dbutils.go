@@ -4,6 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type DBVersion struct {
@@ -25,6 +29,13 @@ type DBVersion struct {
 
 func (v DBVersion) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Year, v.Month, v.Day)
+}
+
+// Date returns a time.Time representing the database version date
+func (v DBVersion) Date() time.Time {
+	// The year is stored as an offset from 2000
+	year := 2000 + int(v.Year)
+	return time.Date(year, time.Month(v.Month), int(v.Day), 0, 0, 0, 0, time.UTC)
 }
 
 // GetDatabaseVersion reads the version information from an IP2Location database file.
@@ -68,4 +79,36 @@ func GetDatabaseVersion(filepath string) (*DBVersion, error) {
 	}
 
 	return version, nil
+}
+
+// GetDateFromName extracts the date from a database filename.
+// Returns the parsed time and an error if the filename doesn't match the expected format.
+func GetDateFromName(dbPath string) (time.Time, error) {
+	base := filepath.Base(dbPath)
+	parts := strings.Split(base, "_")
+	if len(parts) < 1 {
+		return time.Time{}, fmt.Errorf("invalid filename format: %s", base)
+	}
+
+	dateStr := parts[0]
+	if len(dateStr) != 8 {
+		return time.Time{}, fmt.Errorf("invalid date format in filename: %s", dateStr)
+	}
+
+	year, err := strconv.Atoi(dateStr[:4])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid year in filename: %s", dateStr[:4])
+	}
+
+	month, err := strconv.Atoi(dateStr[4:6])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid month in filename: %s", dateStr[4:6])
+	}
+
+	day, err := strconv.Atoi(dateStr[6:8])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid day in filename: %s", dateStr[6:8])
+	}
+
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC), nil
 }

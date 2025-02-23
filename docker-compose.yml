@@ -56,5 +56,7 @@ services:
       - "traefik.http.middlewares.geoblock.plugin.geoblock.logformat="
       - "traefik.http.middlewares.geoblock.plugin.geoblock.databaseFilePath=/plugins-local"
       - "traefik.http.middlewares.geoblock.plugin.geoblock.banHtmlFilePath=/plugins-local"
+      - "traefik.http.middlewares.geoblock.plugin.geoblock.databaseAutoupdate=true"
+      - "traefik.http.middlewares.geoblock.plugin.geoblock.databaseAutoUpdateDir=/data/ip2database"
 volumes:
   logs-local:

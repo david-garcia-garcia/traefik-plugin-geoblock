@@ -156,6 +156,16 @@ http:
           logFormat: "json"                 # Available: json, text
           logPath: "/var/log/geoblock.log"  # Empty for Traefik's standard output
 
+          #-------------------------------
+          # Database Auto-Update Settings
+          #-------------------------------
+          databaseAutoUpdate: true                   
+          # Enable automatic database updates. Updates are asynchronous and triggere during middleware startup. The updated database will be used when the middleware starts again.
+          databaseAutoUpdateDir: "/data/ip2database" 
+          # Directory to store updated databases. This must be a persitent volme in the traefik pod.
+          databaseAutoUpdateToken: ""                # IP2Location download token (if using premium)
+          databaseAutoUpdateCode: "DB1"              # Database product code to download (if using premium)
+
 ```
 
 ### Processing Order
