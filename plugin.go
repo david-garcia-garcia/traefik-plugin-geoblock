@@ -547,9 +547,9 @@ func (p Plugin) Lookup(ip string) (string, error) {
 		return "", err
 	}
 
-	country := record.Country_short
-	if strings.HasPrefix(strings.ToLower(country), "invalid") {
-		return "", errors.New(country)
+	// Avoid redundant assignment and string conversion
+	if strings.HasPrefix(strings.ToLower(record.Country_short), "invalid") {
+		return "", errors.New(record.Country_short)
 	}
 
 	return record.Country_short, nil
