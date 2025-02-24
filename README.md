@@ -104,8 +104,8 @@ http:
           databaseFilePath: "/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN"
           # Can be:
           # - Full path: /path/to/IP2LOCATION-LITE-DB1.IPV6.BIN
-          # - Directory: /path/to/ (will search for IP2LOCATION-LITE-DB1.IPV6.BIN)
-          # - Empty: uses embedded database (not recommended for production) assuming it is installed in /plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/
+          # - Directory: /path/to/ (will search for IP2LOCATION-LITE-DB1.IPV6.BIN recursively). Use /plugins-storage/sources/ if you are installing from plugin repository.
+          # - Empty: uses embedded database assuming it is installed in /plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/
           
           #-------------------------------
           # Country-based Rules (ISO 3166-1 alpha-2 format)
@@ -146,7 +146,7 @@ http:
           banHtmlFilePath: "/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/geoblockban.html"
           # Can be:
           # - Full path: /path/to/geoblockban.html
-          # - Directory: /path/to/ (will search for geoblockban.html)
+          # - Directory: /path/to/ (will search for geoblockban.html recursively). Use /plugins-storage/sources/ if you are installing from plugin repository.
           # - Empty: returns only status code
           # Template variables available: {{.IP}} and {{.Country}}
           
