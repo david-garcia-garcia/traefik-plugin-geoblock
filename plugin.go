@@ -79,6 +79,7 @@ func CreateConfig() *Config {
 type Plugin struct {
 	next                 http.Handler
 	name                 string
+	databaseFile         string // Just for testing purposes
 	db                   *ip2location.DB
 	enabled              bool
 	allowedCountries     map[string]struct{} // Instead of []string to improve lookup performance
@@ -272,18 +273,57 @@ func New(ctx context.Context, next http.Handler, cfg *Config, name string) (http
 		cfg.DatabaseFilePath = searchFile(cfg.DatabaseFilePath, "IP2LOCATION-LITE-DB1.IPV6.BIN", bootstrapLogger)
 	}
 
-	// Handle auto-update configuration
+	// Handle auto-update configuration. This must be carefully crafted because multiple middleware instances
+	// might be running at the same time and trying to compete here.
 	if cfg.DatabaseAutoUpdate {
 		if cfg.DatabaseAutoUpdateDir == "" {
-			return nil, fmt.Errorf("database auto-update directory must be specified when auto-update is enabled")
+			return nil, fmt.Errorf("DatabaseAutoUpdateDir must be specified when auto-update is enabled")
 		}
 
-		// Try to find and use latest database
-		if latest, err := findLatestDatabase(cfg.DatabaseAutoUpdateDir, cfg.DatabaseAutoUpdateCode); err == nil && latest != "" {
-			cfg.DatabaseFilePath = latest
+		tmpFile := filepath.Join(os.TempDir(), "IP2LOCATION-LITE-DB1.IPV6.BIN")
+
+		newDatabase := ""
+
+		if fileExists(tmpFile) {
+			// The traefik instance was already initialized previously or the middleware might have been refreshed.
+			logger.Debug("Using already existing database from temp location")
+			newDatabase = tmpFile
+		} else {
+			// Try to find and use latest database.
+			if latest, err := findLatestDatabase(cfg.DatabaseAutoUpdateDir, cfg.DatabaseAutoUpdateCode); err == nil && latest != "" {
+				// Copy database to temporary location. We can safely assume that the underlying storage defined in DatabaseAutoUpdateDir is NFS so it is
+				// probably orders of magnitude slower in terms of IO than wherever the container itself is, which is probably
+				// fast ephemeral storage in the node itself (i.e. in a Kubernetes cluster). If we have multiple middlewares
+				// in the same traefik instance they will all compete to do this at startup, but i really DO NOT WANT to add
+				// any sort of synchronization or lock during startup.
+				if err := copyFile(latest, tmpFile); err != nil {
+					logger.Warn(fmt.Sprintf("failed to copy database to temp location: %v", err))
+					if fileExists(tmpFile) {
+						// Other middlware initialization might have already copied the file, so we can use it.
+						newDatabase = tmpFile
+					} else {
+						newDatabase = latest // Fallback to original location
+					}
+				} else {
+					newDatabase = tmpFile
+					logger.Debug(fmt.Sprintf("copied database to temp location: %s", tmpFile))
+				}
+
+				// This is a deferred action that updates the database in the background if needed. Returned errors
+				// only work for the non deferred calls.
+				_ = UpdateIfNeeded(latest, false, logger, cfg)
+			}
 		}
 
-		UpdateIfNeeded(cfg.DatabaseFilePath, false, logger, cfg)
+		if fileExists(newDatabase) {
+			// Make sure this is a valid IP2 database before assigning it to the config
+			_, err := GetDatabaseVersion(newDatabase)
+			if err != nil {
+				logger.Warn(fmt.Sprintf("failed to open database %s: %v", newDatabase, err))
+			} else {
+				cfg.DatabaseFilePath = newDatabase
+			}
+		}
 	}
 
 	db, err := ip2location.OpenDB(cfg.DatabaseFilePath)
@@ -341,6 +381,7 @@ func New(ctx context.Context, next http.Handler, cfg *Config, name string) (http
 	plugin := &Plugin{
 		next:                 next,
 		name:                 name,
+		databaseFile:         cfg.DatabaseFilePath,
 		db:                   db,
 		enabled:              cfg.Enabled,
 		allowedCountries:     allowedCountries,

@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -86,6 +88,90 @@ func TestNew(t *testing.T) {
 		}
 		if plugin != nil {
 			t.Error("expected plugin to be nil, but is not")
+		}
+	})
+}
+
+func TestNew_AutoUpdate(t *testing.T) {
+	// Create a temporary directory for test databases
+	tmpDir, err := os.MkdirTemp("", "geoblock-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// This is the default location for the internal temp copy
+	tmpFile := filepath.Join(os.TempDir(), "IP2LOCATION-LITE-DB1.IPV6.BIN")
+	_ = os.Remove(tmpFile)
+
+	// Copy the test database to the temp directory with a versioned name
+	versionedDbPath := filepath.Join(tmpDir, "20240301_IP2LOCATION-LITE-DB1.IPV6.BIN")
+	if err := copyFile(dbFilePath, versionedDbPath); err != nil {
+		t.Fatalf("Failed to copy test database: %v", err)
+	}
+
+	t.Run("AutoUpdateEnabled", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:                true,
+			DatabaseAutoUpdate:     true,
+			DatabaseAutoUpdateDir:  tmpDir,
+			DatabaseAutoUpdateCode: "DB1",
+			DisallowedStatusCode:   http.StatusForbidden,
+		}
+
+		plugin, err := New(context.TODO(), &noopHandler{}, cfg, pluginName)
+		if err != nil {
+			t.Errorf("expected no error, but got: %v", err)
+		}
+		if plugin == nil {
+			t.Error("expected plugin to not be nil")
+		}
+
+		// We have no reference to what database file was actually used....
+		p := plugin.(*Plugin)
+		if p.databaseFile != tmpFile {
+			t.Error("expected database to be initialized")
+		}
+	})
+
+	t.Run("AutoUpdateEnabledNoDir", func(t *testing.T) {
+		cfg := &Config{
+			Enabled:              true,
+			DatabaseAutoUpdate:   true,
+			DisallowedStatusCode: http.StatusForbidden,
+			// Deliberately omit DatabaseAutoUpdateDir
+		}
+
+		plugin, err := New(context.TODO(), &noopHandler{}, cfg, pluginName)
+		if err == nil {
+			t.Error("expected error about missing DatabaseAutoUpdateDir, but got none")
+		}
+		if plugin != nil {
+			t.Error("expected plugin to be nil")
+		}
+	})
+
+	t.Run("AutoUpdateEnabledEmptyDir", func(t *testing.T) {
+		emptyDir, err := os.MkdirTemp("", "geoblock-empty-*")
+		if err != nil {
+			t.Fatalf("Failed to create empty temp dir: %v", err)
+		}
+		defer os.RemoveAll(emptyDir)
+
+		cfg := &Config{
+			Enabled:               true,
+			DatabaseAutoUpdate:    true,
+			DatabaseAutoUpdateDir: emptyDir,
+			DisallowedStatusCode:  http.StatusForbidden,
+			DatabaseFilePath:      dbFilePath, // Fall back to default database
+		}
+
+		plugin, err := New(context.TODO(), &noopHandler{}, cfg, pluginName)
+		if err != nil {
+			t.Errorf("expected no error when falling back to default database, but got: %v", err)
+		}
+		if plugin == nil {
+			t.Error("expected plugin to not be nil when falling back to default database")
 		}
 	})
 }

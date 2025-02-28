@@ -3,6 +3,7 @@ package traefik_plugin_geoblock
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -111,4 +112,33 @@ func GetDateFromName(dbPath string) (time.Time, error) {
 	}
 
 	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC), nil
+}
+
+// copyFile copies a file from src to dst.
+// If dst exists, it will be overwritten.
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	// Create or truncate the destination file
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer destFile.Close()
+
+	// Copy the contents
+	if _, err := io.Copy(destFile, sourceFile); err != nil {
+		return fmt.Errorf("failed to copy file contents: %w", err)
+	}
+
+	// Ensure all data is written to disk
+	if err := destFile.Sync(); err != nil {
+		return fmt.Errorf("failed to sync destination file: %w", err)
+	}
+
+	return nil
 }
