@@ -187,6 +187,43 @@ The plugin processes requests in the following order:
 
 If any IP in the chain is blocked, the request is denied.
 
+### 📝 Log Format
+
+When using JSON logging, the following fields are included in the log entries:
+
+- `time`: Timestamp of the request in ISO 8601 format
+- `level`: Log level (debug, info, warn, error)
+- `msg`: Log message describing the action
+- `plugin`: Plugin identifier
+- `ip`: The IP address that triggered the action
+- `ip_chain`: Full chain of IP addresses from X-Forwarded-For header
+- `country`: Country code or "PRIVATE" for internal networks
+- `host`: Request host header
+- `method`: HTTP method used
+- `phase`: Processing phase where the action occurred:
+  - `ip_allow_private`: Private network check
+  - `ip_block`: IP block rules check
+  - `country_block`: Country rules check
+  - `default`: Default allow/deny rule
+- `path`: Request path
+
+Example log entry:
+```json
+{
+    "time": "2025-03-01T19:24:04.414051815Z",
+    "level": "INFO",
+    "msg": "blocked request",
+    "plugin": "geoblock@docker",
+    "ip": "172.18.0.1",
+    "ip_chain": "",
+    "country": "PRIVATE",
+    "host": "localhost:8000",
+    "method": "GET",
+    "phase": "ip_allow_private",
+    "path": "/bar"
+}
+```
+
 ---
 
 📄 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.

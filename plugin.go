@@ -151,6 +151,7 @@ func createLogger(name, level, format, path string, bootstrapLogger *slog.Logger
 	}
 
 	var handler slog.Handler
+	format = strings.ToLower(format)
 	if format == "json" {
 		handler = slog.NewJSONHandler(writer, opts)
 	} else {
@@ -419,7 +420,7 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	remoteIPs := p.GetRemoteIPs(req)
 
 	for _, ip := range remoteIPs {
-		allowed, country, err := p.CheckAllowed(ip)
+		allowed, country, phase, err := p.CheckAllowed(ip)
 		if err != nil {
 			var ipChain string = ""
 			if len(remoteIPs) > 1 {
@@ -431,6 +432,7 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				"host", req.Host,
 				"method", req.Method,
 				"path", req.URL.Path,
+				"phase", phase,
 				"error", err)
 
 			if p.banIfError {
@@ -452,6 +454,7 @@ func (p Plugin) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 					"country", country,
 					"host", req.Host,
 					"method", req.Method,
+					"phase", phase,
 					"path", req.URL.Path)
 			}
 			p.serveBanHtml(rw, ip, country)
@@ -511,66 +514,66 @@ func cleanIPAddress(ip string) string {
 // - allow: whether the request should be allowed
 // - country: the detected country code for the IP
 // - err: any errors encountered during the check
-func (p Plugin) CheckAllowed(ip string) (allow bool, country string, err error) {
-	// Discrete IPs have higher priority than countries
-	// so deal with them before doing any lookups
+// - phase: the phase in the verification process where the decision was made
+func (p Plugin) CheckAllowed(ip string) (allow bool, country string, phase string, err error) {
 	ipAddr := net.ParseIP(ip)
 	if ipAddr == nil {
-		return false, ip, fmt.Errorf("unable to parse IP address from [%s]", ip)
+		return false, ip, "", fmt.Errorf("unable to parse IP address from [%s]", ip)
 	}
 
-	// We want this check first because it's fast, even if it makes more sense to have
-	// it after the ip whitelist/blacklist verification
 	if ipAddr.IsPrivate() {
-		return p.allowPrivate, PrivateIpCountryAlias, nil
+		if p.allowPrivate {
+			return true, PrivateIpCountryAlias, "allow_private", nil
+		} else {
+			return false, PrivateIpCountryAlias, "allow_private", nil
+		}
 	}
 
 	blocked, blockedNetworkLength, err := p.isBlockedIPBlocks(ipAddr)
 	if err != nil {
-		return false, ip, fmt.Errorf("failed to check if IP %q is blocked by IP block: %w", ip, err)
+		return false, ip, "", fmt.Errorf("failed to check if IP %q is blocked by IP block: %w", ip, err)
 	}
 
 	allowed, allowedNetworkLength, err := p.isAllowedIPBlocks(ipAddr)
 	if err != nil {
-		return false, ip, fmt.Errorf("failed to check if IP %q is allowed by IP block: %w", ip, err)
+		return false, ip, "", fmt.Errorf("failed to check if IP %q is allowed by IP block: %w", ip, err)
 	}
 
 	// NB: whichever matched prefix is longer has higher priority: more specific to less specific only if both matched.
 	if (allowedNetworkLength < blockedNetworkLength) && (allowedNetworkLength > 0) && (blockedNetworkLength > 0) {
 		if blocked {
-			return false, country, nil
+			return false, country, "blocked_ip_block", nil
 		}
 		if allowed {
-			return true, country, nil
+			return true, country, "allowed_ip_block", nil
 		}
 	} else {
 		if allowed {
-			return true, country, nil
+			return true, country, "allowed_ip_block", nil
 		}
 		if blocked {
-			return false, country, nil
+			return false, country, "blocked_ip_block", nil
 		}
 	}
 
 	// Look up the country for this IP
 	country, err = p.Lookup(ip)
 	if err != nil {
-		return false, ip, fmt.Errorf("lookup of %s failed: %w", ip, err)
+		return false, ip, "", fmt.Errorf("lookup of %s failed: %w", ip, err)
 	}
 
-	// Check if country is in the allowlist (using O(1) map lookup)
-	// If found, allow the request immediately
 	if _, allowed := p.allowedCountries[country]; allowed {
-		return true, country, nil
+		return true, country, "allowed_country", nil
 	}
 
-	// Check if country is in the blocklist (using O(1) map lookup)
-	// If found, block the request immediately
 	if _, blocked := p.blockedCountries[country]; blocked {
-		return false, country, nil
+		return false, country, "blocked_country", nil
 	}
 
-	return p.defaultAllow, country, nil
+	if p.defaultAllow {
+		return true, country, "default_allow", nil
+	}
+	return false, country, "default_allow", nil
 }
 
 // Lookup queries the ip2location database for a given IP address.
