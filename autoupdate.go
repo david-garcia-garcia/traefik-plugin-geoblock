@@ -206,20 +206,7 @@ func downloadAndUpdateDatabase(cfg *Config, logger *slog.Logger) error {
 	finalName := fmt.Sprintf("%s_IP2LOCATION-LITE-%s.IPV6.BIN", version.Date().Format("20060102"), dbCode)
 	finalPath := filepath.Join(cfg.DatabaseAutoUpdateDir, finalName)
 
-	// Copy the file instead of rename to handle cross-device moves
-	srcFile, err := os.Open(tmpDBPath)
-	if err != nil {
-		return fmt.Errorf("failed to open temporary database: %w", err)
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(finalPath)
-	if err != nil {
-		return fmt.Errorf("failed to create final database: %w", err)
-	}
-	defer dstFile.Close()
-
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
+	if err := copyFile(tmpDBPath, finalPath, false); err != nil {
 		return fmt.Errorf("failed to copy database to final location: %w", err)
 	}
 

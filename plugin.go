@@ -175,14 +175,6 @@ func (w *traefikLogWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return !info.IsDir()
-}
-
 // searchFile looks for a file in the filesystem, handling both direct paths and directory searches.
 // If baseFile is a direct path to an existing file, that path is returned.
 // If baseFile is a directory, it recursively searches for defaultFile within that directory.
@@ -296,7 +288,7 @@ func New(ctx context.Context, next http.Handler, cfg *Config, name string) (http
 				// fast ephemeral storage in the node itself (i.e. in a Kubernetes cluster). If we have multiple middlewares
 				// in the same traefik instance they will all compete to do this at startup, but i really DO NOT WANT to add
 				// any sort of synchronization or lock during startup.
-				if err := copyFile(latest, tmpFile); err != nil {
+				if err := copyFile(latest, tmpFile, false); err != nil {
 					logger.Warn(fmt.Sprintf("failed to copy database to temp location: %v", err))
 					if fileExists(tmpFile) {
 						// Other middlware initialization might have already copied the file, so we can use it.

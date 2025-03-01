@@ -106,7 +106,7 @@ func TestNew_AutoUpdate(t *testing.T) {
 
 	// Copy the test database to the temp directory with a versioned name
 	versionedDbPath := filepath.Join(tmpDir, "20240301_IP2LOCATION-LITE-DB1.IPV6.BIN")
-	if err := copyFile(dbFilePath, versionedDbPath); err != nil {
+	if err := copyFile(dbFilePath, versionedDbPath, true); err != nil {
 		t.Fatalf("Failed to copy test database: %v", err)
 	}
 

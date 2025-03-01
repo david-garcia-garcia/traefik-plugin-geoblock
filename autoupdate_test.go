@@ -197,6 +197,8 @@ func TestUpdateIfNeeded(t *testing.T) {
 				DatabaseAutoUpdateCode: "DB1",
 			}
 
+			_ = os.RemoveAll(tmpDir)
+
 			err := UpdateIfNeeded(tt.dbPath, true, logger, cfg)
 
 			// Check error conditions
