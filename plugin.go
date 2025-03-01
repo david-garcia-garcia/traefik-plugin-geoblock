@@ -525,7 +525,7 @@ func (p Plugin) CheckAllowed(ip string) (allow bool, country string, phase strin
 		if p.allowPrivate {
 			return true, PrivateIpCountryAlias, "allow_private", nil
 		} else {
-			return false, ip, "allow_private", nil
+			return false, PrivateIpCountryAlias, "allow_private", nil
 		}
 	}
 
