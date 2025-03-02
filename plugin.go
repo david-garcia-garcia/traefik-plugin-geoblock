@@ -282,6 +282,8 @@ func New(ctx context.Context, next http.Handler, cfg *Config, name string) (http
 			logger.Debug("Using already existing database from temp location")
 			newDatabase = tmpFile
 		} else {
+			latest := ""
+
 			// Try to find and use latest database.
 			if latest, err := findLatestDatabase(cfg.DatabaseAutoUpdateDir, cfg.DatabaseAutoUpdateCode); err == nil && latest != "" {
 				// Copy database to temporary location. We can safely assume that the underlying storage defined in DatabaseAutoUpdateDir is NFS so it is
@@ -301,11 +303,13 @@ func New(ctx context.Context, next http.Handler, cfg *Config, name string) (http
 					newDatabase = tmpFile
 					logger.Debug(fmt.Sprintf("copied database to temp location: %s", tmpFile))
 				}
-
-				// This is a deferred action that updates the database in the background if needed. Returned errors
-				// only work for the non deferred calls.
-				_ = UpdateIfNeeded(latest, false, logger, cfg)
 			}
+
+			// This is a deferred action that updates the database in the background if needed. Returned errors
+			// only work for the non deferred calls. Careful with this method because it uses the filename
+			// and not the actual DB metadata to decide if the DB is outdated. It accepts an empty path indicating
+			// no auto-update database is available (so it will force an initial download).
+			_ = UpdateIfNeeded(latest, false, logger, cfg)
 		}
 
 		if fileExists(newDatabase) {
