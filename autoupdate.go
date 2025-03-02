@@ -103,11 +103,15 @@ func downloadAndUpdateDatabase(cfg *Config, logger *slog.Logger) error {
 
 	// Check if lock file exists and its age
 	if fi, err := os.Stat(lockFile); err == nil {
-		if time.Since(fi.ModTime()) < time.Hour {
-			return fmt.Errorf("another update is in progress and is probably stuck (lock file: %s)", lockFile)
+		age := time.Since(fi.ModTime())
+		if age < time.Hour {
+			logger.Debug("another update is in progress (lock file: %s, age: %s)", lockFile, age)
+			return nil
 		}
-		// Lock is older than 1 hour, consider it stale
-		os.Remove(lockFile)
+		logger.Warn("removing stale lock file (lock file: %s, age: %s)", lockFile, age)
+		if err := os.Remove(lockFile); err != nil {
+			return fmt.Errorf("failed to remove stale lock file %s: %v", lockFile, err)
+		}
 	}
 
 	// Create lock file
