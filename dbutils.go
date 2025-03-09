@@ -85,9 +85,10 @@ func GetDatabaseVersion(filepath string) (*DBVersion, error) {
 // GetDateFromName extracts the date from a database filename.
 // Returns the parsed time and an error if the filename doesn't match the expected format.
 func GetDateFromName(dbPath string) (time.Time, error) {
-	// Convert Windows path separators to forward slashes for consistency
-	dbPath = filepath.ToSlash(dbPath)
+	// First convert the path to the current OS format
+	dbPath = filepath.FromSlash(dbPath)
 
+	// Now use filepath.Base which will handle the OS-specific path correctly
 	base := filepath.Base(dbPath)
 	parts := strings.Split(base, "_")
 	if len(parts) < 1 {
