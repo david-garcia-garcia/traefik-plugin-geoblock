@@ -1,8 +1,10 @@
 # 🛡️ traefik-plugin-geoblock
 
-[![Build Status](https://github.com/nscuro/traefik-plugin-geoblock/actions/workflows/ci.yml/badge.svg)](https://github.com/nscuro/traefik-plugin-geoblock/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/nscuro/traefik-plugin-geoblock)](https://goreportcard.com/report/github.com/nscuro/traefik-plugin-geoblock)
-[![Latest GitHub release](https://img.shields.io/github/v/release/nscuro/traefik-plugin-geoblock?sort=semver)](https://github.com/nscuro/traefik-plugin-geoblock/releases/latest)
+This plugins was forked from [nscuro/traefik-plugin-geoblock: traefik plugin to whitelist requests based on geolocation](https://github.com/nscuro/traefik-plugin-geoblock) and remains a compatible with the original plugin.
+
+[![Build Status](https://github.com/david-garcia-garcia/traefik-plugin-geoblock/actions/workflows/ci.yml/badge.svg)](https://github.com/david-garcia-garcia/traefik-plugin-geoblock/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/david-garcia-garcia/traefik-plugin-geoblock)](https://goreportcard.com/report/github.com/david-garcia-garcia/traefik-plugin-geoblock)
+[![Latest GitHub release](https://img.shields.io/github/v/release/david-garcia-garcia/traefik-plugin-geoblock?sort=semver)](https://github.com/david-garcia-garcia/traefik-plugin-geoblock/releases/latest)
 [![License](https://img.shields.io/badge/license-Apache%202.0-brightgreen.svg)](LICENSE)  
 
 A Traefik plugin that allows or blocks requests based on IP geolocation using IP2Location database.
@@ -18,7 +20,7 @@ A Traefik plugin that allows or blocks requests based on IP geolocation using IP
 - Configurable handling of private/internal networks
 - Customizable error responses
 - Flexible logging options
-- Automatic database updates
+- Automatic IP2 location database updates both for free and premium
 
 ## 📥 Installation
 
@@ -32,7 +34,7 @@ Create or modify your Traefik static configuration
 experimental:
   localPlugins:
     geoblock:
-      moduleName: github.com/nscuro/traefik-plugin-geoblock
+      moduleName: github.com/david-garcia-garcia/traefik-plugin-geoblock
 ```
 
 You should clone the plugin into the container, i.e
@@ -40,9 +42,9 @@ You should clone the plugin into the container, i.e
 ```dockerfile
 # Create the directory for the plugins
 RUN set -eux; \
-    mkdir -p /plugins-local/src/github.com/nscuro
+    mkdir -p /plugins-local/src/github.com/david-garcia-garcia
 
-RUN set -eux && git clone https://github.com/david-garcia-garcia/traefik-plugin-geoblock /plugins-local/src/github.com/nscuro/traefik-plugin-geoblock --branch v1.0.0-beta.5 --single-branch
+RUN set -eux && git clone https://github.com/david-garcia-garcia/traefik-plugin-geoblock /plugins-local/src/github.com/david-garcia-garcia/traefik-plugin-geoblock --branch v1.0.0 --single-branch
 ```
 
 ### Traefik Plugin Registry Installation
@@ -53,7 +55,7 @@ Add to your Traefik static configuration:
 experimental:
   plugins:
     geoblock:
-      moduleName: github.com/nscuro/traefik-plugin-geoblock
+      moduleName: github.com/david-garcia-garcia/traefik-plugin-geoblock
       version: v0.5.0
 ```
 
@@ -101,11 +103,11 @@ http:
           #-------------------------------
           # Database Configuration
           #-------------------------------
-          databaseFilePath: "/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN"
+          databaseFilePath: "/plugins-local/src/github.com/david-garcia-garcia/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN"
           # Can be:
           # - Full path: /path/to/IP2LOCATION-LITE-DB1.IPV6.BIN
           # - Directory: /path/to/ (will search for IP2LOCATION-LITE-DB1.IPV6.BIN recursively). Use /plugins-storage/sources/ if you are installing from plugin repository.
-          # - Empty: uses embedded database assuming it is installed in /plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/
+          # - Empty: uses embedded database assuming it is installed in /plugins-local/src/github.com/david-garcia-garcia/traefik-plugin-geoblock/
           
           #-------------------------------
           # Country-based Rules (ISO 3166-1 alpha-2 format)
@@ -143,7 +145,7 @@ http:
           banIfError: true                # Block requests if IP lookup fails
           disallowedStatusCode: 403       # HTTP status code for blocked requests. If you are using banHtmlFilePath make sure to set this to a valid code (such as NOT 204).
           
-          banHtmlFilePath: "/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/geoblockban.html"
+          banHtmlFilePath: "/plugins-local/src/github.com/david-garcia-garcia/traefik-plugin-geoblock/geoblockban.html"
           # Can be:
           # - Full path: /path/to/geoblockban.html
           # - Directory: /path/to/ (will search for geoblockban.html recursively). Use /plugins-storage/sources/ if you are installing from plugin repository.

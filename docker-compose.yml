@@ -12,12 +12,12 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
 
-      - "--experimental.localplugins.geoblock.modulename=github.com/nscuro/traefik-plugin-geoblock"
+      - "--experimental.localplugins.geoblock.modulename=github.com/david-garcia-garcia/traefik-plugin-geoblock"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - logs-local:/var/log/traefik
       - './geoblockban.html:/geoblockban.html:ro'
-      - ./:/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock
+      - ./:/plugins-local/src/github.com/david-garcia-garcia/traefik-plugin-geoblock
     ports:
       - 8000:80
       - 8080:8080
@@ -36,8 +36,8 @@ services:
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.logLevel=DEBUG"
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.logPath="
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.logFormat=JSON"
-      - "traefik.http.middlewares.geoblock2.plugin.geoblock.databaseFilePath=/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN"
-      - "traefik.http.middlewares.geoblock2.plugin.geoblock.banHtmlFilePath=/plugins-local/src/github.com/nscuro/traefik-plugin-geoblock/geoblockban.html"
+      - "traefik.http.middlewares.geoblock2.plugin.geoblock.databaseFilePath=/plugins-local/src/github.com/david-garcia-garcia/traefik-plugin-geoblock/IP2LOCATION-LITE-DB1.IPV6.BIN"
+      - "traefik.http.middlewares.geoblock2.plugin.geoblock.banHtmlFilePath=/plugins-local/src/github.com/david-garcia-garcia/traefik-plugin-geoblock/geoblockban.html"
       - "traefik.http.middlewares.geoblock2.plugin.geoblock.allowPrivate=true"
 
   whoami2:

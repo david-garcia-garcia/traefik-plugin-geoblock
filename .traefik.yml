@@ -1,6 +1,6 @@
 displayName: geoblock
 type: middleware
-import: github.com/nscuro/traefik-plugin-geoblock
+import: github.com/david-garcia-garcia/traefik-plugin-geoblock
 summary: traefik plugin to block or allow requests based on geolocation
 testData:
   # It doesn't appear to be possible to get the pilot plugin analyzer
