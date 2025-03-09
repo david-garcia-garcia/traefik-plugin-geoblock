@@ -85,10 +85,13 @@ func GetDatabaseVersion(filepath string) (*DBVersion, error) {
 // GetDateFromName extracts the date from a database filename.
 // Returns the parsed time and an error if the filename doesn't match the expected format.
 func GetDateFromName(dbPath string) (time.Time, error) {
-	base := filepath.Base(dbPath)
-	parts := strings.Split(base, "_")
+	// Normalize to Linux-style paths. I know this is NOT the best way, but works for our use case.
+	dbPath = strings.ReplaceAll(dbPath, "\\", "/")
+
+	_, tail := filepath.Split(dbPath)
+	parts := strings.Split(tail, "_")
 	if len(parts) < 1 {
-		return time.Time{}, fmt.Errorf("invalid filename format: %s", base)
+		return time.Time{}, fmt.Errorf("invalid filename format: %s", tail)
 	}
 
 	dateStr := parts[0]

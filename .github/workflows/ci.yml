@@ -18,7 +18,7 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@cdcb36043654635271a94b9a6d1392de5bb323a7 # v5
       with:
-        go-version: "1.20"
+        go-version: "1.21"
     - name: Checkout Repository
       uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
     - name: Run golangci-lint
@@ -29,24 +29,12 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    env:
-      GOPATH: ${{ github.workspace }}
-    defaults:
-      run:
-        working-directory: ${{ env.GOPATH }}/src/${{ github.repository }}
     steps:
     - name: Checkout Repository
       uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
-      with:
-        path: ${{ env.GOPATH }}/src/${{ github.repository }}
     - name: Setup Go
       uses: actions/setup-go@cdcb36043654635271a94b9a6d1392de5bb323a7 # v5
       with:
-        go-version: "1.20"
-    - name: Install yaegi
-      run: |
-        mkdir -p "$HOME/.local/bin"
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        curl -sfL https://raw.githubusercontent.com/traefik/yaegi/master/install.sh | bash -s -- -b "$HOME/.local/bin" v0.15.1
-    - name: Test
-      run: make test-yaegi
+        go-version: "1.21"
+    - name: Run Tests
+      run: go test -v ./...

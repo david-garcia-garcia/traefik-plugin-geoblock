@@ -44,7 +44,7 @@ func TestPlugin_DatabaseDownloadAndUpdate(t *testing.T) {
 				}
 				for _, f := range files {
 					path := filepath.Join(dir, f)
-					if err := os.WriteFile(path, []byte("test"), 0644); err != nil {
+					if err := os.WriteFile(path, []byte("test"), 0600); err != nil {
 						t.Fatalf("Failed to create test file %s: %v", f, err)
 					}
 				}
@@ -146,7 +146,7 @@ func TestUpdateIfNeeded(t *testing.T) {
 				source := "IP2LOCATION-LITE-DB1.IPV6.BIN" // assuming this exists in test data
 				content, err := os.ReadFile(source)
 				if err == nil {
-					_ = os.WriteFile(path, content, 0644)
+					_ = os.WriteFile(path, content, 0600)
 				}
 			},
 		},
@@ -154,7 +154,7 @@ func TestUpdateIfNeeded(t *testing.T) {
 			name:   "old database triggers update",
 			dbPath: filepath.Join(tmpDir, time.Now().AddDate(0, -2, 0).Format("20060102")+"_IP2LOCATION-LITE-DB1.IPV6.BIN"),
 			setupFunc: func(path string) {
-				_ = os.WriteFile(path, []byte("old data"), 0644)
+				_ = os.WriteFile(path, []byte("old data"), 0600)
 			},
 			validateFunc: func(t *testing.T, dir string) {
 				// Verify we got a new database file
@@ -235,7 +235,7 @@ func TestFindLatestDatabase(t *testing.T) {
 	}
 	for _, f := range files {
 		path := filepath.Join(testDir, f)
-		if err := os.WriteFile(path, []byte("test"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("test"), 0600); err != nil {
 			t.Fatalf("Failed to create test file %s: %v", f, err)
 		}
 	}

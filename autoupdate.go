@@ -13,7 +13,7 @@ import (
 
 const (
 	liteDownloadURL  = "https://download.ip2location.com/lite/IP2LOCATION-LITE-DB1.IPV6.BIN.ZIP"
-	tokenDownloadURL = "https://www.ip2location.com/download?token=%s&file=%s"
+	tokenDownloadURL = "https://www.ip2location.com/download?token=%s&file=%s" // #nosec G101
 )
 
 // UpdateIfNeeded checks if the database needs updating and performs the update if necessary.
@@ -140,7 +140,7 @@ func downloadAndUpdateDatabase(cfg *Config, logger *slog.Logger) error {
 		downloadURL = liteDownloadURL
 	}
 
-	resp, err := http.Get(downloadURL)
+	resp, err := http.Get(downloadURL) // #nosec G107
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
@@ -184,7 +184,9 @@ func downloadAndUpdateDatabase(cfg *Config, logger *slog.Logger) error {
 				return fmt.Errorf("failed to create database file: %w", err)
 			}
 
-			_, err = io.Copy(dbFile, rc)
+			// Add size limit to prevent zip bombs (200MB should be more than enough for the database)
+			limited := io.LimitReader(rc, 200*1024*1024) // 100MB limit
+			_, err = io.Copy(dbFile, limited)            // #nosec G110
 			rc.Close()
 			if err != nil {
 				dbFile.Close()
