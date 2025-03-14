@@ -1,6 +1,6 @@
 # 🛡️ traefik-plugin-geoblock
 
-This plugins was forked from [nscuro/traefik-plugin-geoblock: traefik plugin to whitelist requests based on geolocation](https://github.com/nscuro/traefik-plugin-geoblock) and remains a compatible with the original plugin.
+This plugin was forked from [nscuro/traefik-plugin-geoblock: traefik plugin to whitelist requests based on geolocation](https://github.com/nscuro/traefik-plugin-geoblock) and remains compatible with the original plugin.
 
 [![Build Status](https://github.com/david-garcia-garcia/traefik-plugin-geoblock/actions/workflows/ci.yml/badge.svg)](https://github.com/david-garcia-garcia/traefik-plugin-geoblock/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/david-garcia-garcia/traefik-plugin-geoblock)](https://goreportcard.com/report/github.com/david-garcia-garcia/traefik-plugin-geoblock)
@@ -44,7 +44,7 @@ You should clone the plugin into the container, i.e
 RUN set -eux; \
     mkdir -p /plugins-local/src/github.com/david-garcia-garcia
 
-RUN set -eux && git clone https://github.com/david-garcia-garcia/traefik-plugin-geoblock /plugins-local/src/github.com/david-garcia-garcia/traefik-plugin-geoblock --branch v1.0.0 --single-branch
+RUN set -eux && git clone https://github.com/david-garcia-garcia/traefik-plugin-geoblock /plugins-local/src/github.com/david-garcia-garcia/traefik-plugin-geoblock --branch v1.0.1 --single-branch
 ```
 
 ### Traefik Plugin Registry Installation
@@ -56,7 +56,7 @@ experimental:
   plugins:
     geoblock:
       moduleName: github.com/david-garcia-garcia/traefik-plugin-geoblock
-      version: v0.5.0
+      version: v1.0.1
 ```
 
 ## ⚙️ Configuration
