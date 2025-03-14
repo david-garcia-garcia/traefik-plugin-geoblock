@@ -1,6 +1,6 @@
 # 🛡️ traefik-plugin-geoblock
 
-This plugins was forked from [nscuro/traefik-plugin-geoblock: traefik plugin to whitelist requests based on geolocation](https://github.com/nscuro/traefik-plugin-geoblock) and remains a compatible with the original plugin.
+This plugins was forked from [nscuro/traefik-plugin-geoblock: traefik plugin to whitelist requests based on geolocation](https://github.com/nscuro/traefik-plugin-geoblock) and remains compatible with the original plugin.
 
 [![Build Status](https://github.com/david-garcia-garcia/traefik-plugin-geoblock/actions/workflows/ci.yml/badge.svg)](https://github.com/david-garcia-garcia/traefik-plugin-geoblock/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/david-garcia-garcia/traefik-plugin-geoblock)](https://goreportcard.com/report/github.com/david-garcia-garcia/traefik-plugin-geoblock)
